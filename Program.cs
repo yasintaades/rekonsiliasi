@@ -1,31 +1,23 @@
 using Reconciliation.Api.Endpoints;
 
+var builder = WebApplication.CreateBuilder(args);
 
-internal class Program
+// CORS
+builder.Services.AddCors(options =>
 {
-    private static void Main(string[] args){
-        
-        var builder = WebApplication.CreateBuilder(args);
-        var app = builder.Build();
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
 
-        app.MapGet("/", () => "Hello World!");
-        // mapping endpoint
+var app = builder.Build();
 
-        builder.Services.AddCors(options =>
-        {
-            options.AddPolicy("AllowAll", policy =>
-            {
-                policy.AllowAnyOrigin()
-                    .AllowAnyHeader()
-                    .AllowAnyMethod();
-            });
-        });
+app.UseCors();
 
-        app.MapReconciliationEndpoints();
-        app.UseCors("AllowAll");
+// 🔥 panggil endpoint dari file lain
+app.MapReconciliationEndpoints();
 
-        app.Run();
-
-
-    }
-}
+app.Run();
