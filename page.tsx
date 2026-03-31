@@ -1,12 +1,18 @@
 "use client";
 
 import { useState } from "react";
+import Sidebar from "../../components/layouts/Sidebar";
+
 
 export default function Home() {
   const [file1, setFile1] = useState<File | null>(null);
   const [file2, setFile2] = useState<File | null>(null);
   const [result, setResult] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
   const [filter, setFilter] = useState<string | null>(null);
 
   const handleUpload = async () => {
@@ -22,7 +28,7 @@ export default function Home() {
     try {
       setLoading(true);
 
-      const res = await fetch("http://localhost:5000/reconciliations/upload", {
+      const res = await fetch("http://localhost:5077/reconciliations/upload", {
         method: "POST",
         body: formData,
       });
@@ -42,6 +48,7 @@ export default function Home() {
       setLoading(false);
     }
   };
+  
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -63,17 +70,40 @@ export default function Home() {
     : result.details
   : [];
 
-  return (
-    <main className="min-h-screen bg-gray-100 p-6">
-      <div className="max-w-6xl mx-auto">
+  if (filter === "MISMATCH") {
+  return result.details.filter(
+    (d) =>
+      d.status === "ONLY_ANCHANTO" ||
+      d.status === "ONLY_CEGID"
+  );
+}
 
+  
+
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+
+  const currentData = filteredDetails.slice(indexOfFirstItem, indexOfLastItem);
+
+  const totalPages = Math.ceil(filteredDetails.length / itemsPerPage);
+
+  const handleFilter = (value: string | null) => {
+    setFilter(value);
+    setCurrentPage(1); // 🔥 penting
+  };
+
+  return (
+    
+    <main className="flex justify-between items-start mb-10">
+      <Sidebar />
+      <div className="flex-1 p-6 w-full">
         {/* HEADER */}
-        <h1 className="text-3xl font-bold mb-6 text-center">
-          📊 Reconciliation Tool
+        <h1 className="text-2xl font-bold flex-1 p-6 text-center">
+          📊 Reconciliation B2B
         </h1>
 
         {/* UPLOAD CARD */}
-        <div className="bg-white rounded-2xl shadow p-6 mb-6">
+        <div className="flex justify-between items-center mb-10">
           <h2 className="text-xl font-semibold mb-4">Upload Files</h2>
 
           <div className="grid md:grid-cols-2 gap-4 mb-4">
@@ -100,95 +130,131 @@ export default function Home() {
 
         {/* SUMMARY */}
         {result && (
-          
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 text-center">
+          <div className="flex justify-center items-center mb-10 ml-40">
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-10">
 
-            <div
-                onClick={() => setFilter(null)}
-                className="bg-gray-50 p-4 rounded cursor-pointer hover:bg-gray-100"
-            >
-                <p className="text-sm">All</p>
-                <p className="text-lg font-bold">{result.details.length}</p>
-            </div>
+              <div
+                  onClick={() => handleFilter("MATCH")}
+                  className="bg-gray-50 p-4 rounded cursor-pointer hover:bg-gray-100"
+              >
+                  <p className="text-sm">All</p>
+                  <p className="text-lg font-bold">{result.details.length}</p>
+              </div>
 
-            <div
-                onClick={() => setFilter("MATCH")}
-                className="bg-green-50 p-4 rounded cursor-pointer hover:bg-green-100"
-            >
-                <p className="text-sm">Matched</p>
-                <p className="text-lg font-bold text-green-600">
-                {result.summary.matched}
-                </p>
-            </div>
+              <div
+                  onClick={() => handleFilter("MATCH")}
+                  className="bg-green-50 p-4 rounded cursor-pointer hover:bg-green-100"
+              >
+                  <p className="text-sm">Matched</p>
+                  <p className="text-lg font-bold text-green-600">
+                  {result.summary.matched}
+                  </p>
+              </div>
 
-            <div
-                onClick={() => setFilter("AMOUNT_MISMATCH")}
-                className="bg-yellow-50 p-4 rounded cursor-pointer hover:bg-yellow-100"
-            >
-                <p className="text-sm">Mismatch</p>
-                <p className="text-lg font-bold text-yellow-600">
-                {result.summary.mismatch}
-                </p>
-            </div>
+              <div
+                  onClick={() => handleFilter("AMOUNT_MISMATCH")}
+                  className="bg-yellow-50 p-4 rounded cursor-pointer hover:bg-yellow-100"
+              >
+                  <p className="text-sm">Mismatch</p>
+                  <p className="text-lg font-bold text-yellow-600">
+                  {result.summary.mismatch}
+                  </p>
+              </div>
 
-            <div
-                onClick={() => setFilter("ONLY_ANCHANTO")}
-                className="bg-red-50 p-4 rounded cursor-pointer hover:bg-red-100"
-            >
-                <p className="text-sm">Only Anchanto</p>
-                <p className="text-lg font-bold text-red-600">
-                {result.summary.onlyAnchanto}
-                </p>
-            </div>
+              <div
+                  onClick={() => handleFilter("ONLY_ANCHANTO")}
+                  className="bg-red-50 p-4 rounded cursor-pointer hover:bg-red-100"
+              >
+                  <p className="text-sm">Only Anchanto</p>
+                  <p className="text-lg font-bold text-red-600">
+                  {result.summary.onlyAnchanto}
+                  </p>
+              </div>
 
-            <div
-                onClick={() => setFilter("ONLY_CEGID")}
-                className="bg-red-50 p-4 rounded cursor-pointer hover:bg-red-100"
-            >
-                <p className="text-sm">Only Cegid</p>
-                <p className="text-lg font-bold text-red-600">
-                {result.summary.onlyCegid}
-                </p>
+              <div
+                  onClick={() => handleFilter("ONLY_CEGID")}
+                  className="bg-red-50 p-4 rounded cursor-pointer hover:bg-red-100"
+              >
+                  <p className="text-sm">Only Cegid</p>
+                  <p className="text-lg font-bold text-red-600">
+                  {result.summary.onlyCegid}
+                  </p>
+              </div>
             </div>
-            </div>
+          </div>
         )}
         
         {/* TABLE */}
         {result && (
-        
-          <div className="bg-white rounded-2xl shadow p-6">
+        <div className="flex justify-center items-center mb-10 ml-40">
+          <div className="mb-10">
+            {/* TITLE */}
             <h2 className="text-xl font-semibold mb-4">Details</h2>
 
-            <div className="overflow-auto max-h-[500px]">
-              <table className="w-full border border-gray-200 text-sm">
-                <thead className="bg-gray-100 sticky top-0">
-                  <tr>
-                    <th className="p-2 border">Ref No</th>
-                    <th className="p-2 border">Anchanto</th>
-                    <th className="p-2 border">Cegid</th>
-                    <th className="p-2 border">Difference</th>
-                    <th className="p-2 border">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredDetails.map((d: any, i: number) => (
-                    <tr key={i} className="text-center hover:bg-gray-50">
-                      <td className="p-2 border">{d.refNo}</td>
-                      <td className="p-2 border">{d.anchantoAmount}</td>
-                      <td className="p-2 border">{d.cegidAmount}</td>
-                      <td className="p-2 border">{d.difference}</td>
-                      <td className={`p-2 border ${getStatusColor(d.status)}`}>
-                        {d.status}
-                      </td>
+            {/* TABLE CONTAINER */}
+            <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+              
+              {/* SCROLL AREA */}
+              
+                <table className="w-full text-sm">
+                  
+                  {/* HEADER */}
+                  <thead className="bg-gray-100 sticky top-0 z-10">
+                    <tr className="text-left">
+                      <th className="p-3 border-b">Ref No</th>
+                      <th className="p-3 border-b">Anchanto</th>
+                      <th className="p-3 border-b">Cegid</th>
+                      <th className="p-3 border-b">Status</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+
+                  {/* BODY */}
+                  <tbody>
+                    {currentData.map((d: any, i: number) => (
+                      <tr key={i} className="hover:bg-gray-50 transition">
+                        <td className="p-3 border-b">{d.refNo}</td>
+                        <td className="p-3 border-b">{d.anchantoSKU}</td>
+                        <td className="p-3 border-b">{d.cegidSKU}</td>
+                        <td className={`p-3 border-b font-medium ${getStatusColor(d.status)}`}>
+                          {d.status}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+
+                </table>
+                <div className="flex justify-between items-center mt-4 px-2">
+                  
+                  <span className="text-sm text-gray-600">
+                    Page {currentPage} of {totalPages}
+                  </span>
+
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 border rounded disabled:opacity-50"
+                    >
+                      Prev
+                    </button>
+
+                    <button
+                      onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                      disabled={currentPage === totalPages}
+                      className="px-3 py-1 border rounded disabled:opacity-50"
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
             </div>
           </div>
+        </div>
         )}
-
       </div>
     </main>
   );
 }
+
+
+
