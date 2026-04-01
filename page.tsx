@@ -70,14 +70,6 @@ export default function Home() {
     : result.details
   : [];
 
-  if (filter === "MISMATCH") {
-  return result.details.filter(
-    (d) =>
-      d.status === "ONLY_ANCHANTO" ||
-      d.status === "ONLY_CEGID"
-  );
-}
-
   
 
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -89,7 +81,7 @@ export default function Home() {
 
   const handleFilter = (value: string | null) => {
     setFilter(value);
-    setCurrentPage(1); // 🔥 penting
+    // setCurrentPage(1); 
   };
 
   return (
@@ -210,7 +202,7 @@ export default function Home() {
 
                   {/* BODY */}
                   <tbody>
-                    {currentData.map((d: any, i: number) => (
+                    {filteredDetails.map((d: any, i: number) => (
                       <tr key={i} className="hover:bg-gray-50 transition">
                         <td className="p-3 border-b">{d.refNo}</td>
                         <td className="p-3 border-b">{d.anchantoSKU}</td>
