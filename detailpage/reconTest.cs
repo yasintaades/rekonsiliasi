@@ -4,9 +4,9 @@ using Npgsql;
 using OfficeOpenXml;
 using System.Globalization;
 
-public static class ReconTestEndpoints
+public static class ReconB2BEndpoints
 {
-    public static void MapReconTestEndpoints(this WebApplication app)
+    public static void MapReconB2BEndpoints(this WebApplication app)
     {
          ExcelPackage.License.SetNonCommercialPersonal("ReconciliationApp");
 
@@ -129,47 +129,81 @@ public static class ReconTestEndpoints
     // 🔹 RECONCILIATION LOGIC
     // ==========================
     private static List<ReconResult> Reconcile(List<ExcelRecord> list1, List<ExcelRecord> list2)
+{
+    var result = new List<ReconResult>();
+
+    // 🔹 Group by RefNo
+    var dict1 = list1.GroupBy(x => x.RefNo)
+        .ToDictionary(g => g.Key, g => g.ToList());
+
+    var dict2 = list2.GroupBy(x => x.RefNo)
+        .ToDictionary(g => g.Key, g => g.ToList());
+
+    var allKeys = dict1.Keys.Union(dict2.Keys);
+
+    foreach (var key in allKeys)
     {
-        var result = new List<ReconResult>();
+        var l1 = dict1.ContainsKey(key) ? dict1[key] : new List<ExcelRecord>();
+        var l2 = dict2.ContainsKey(key) ? dict2[key] : new List<ExcelRecord>();
 
-        var dict1 = list1.GroupBy(x => x.RefNo).ToDictionary(g => g.Key, g => g.ToList());
-        var dict2 = list2.GroupBy(x => x.RefNo).ToDictionary(g => g.Key, g => g.ToList());
+        // 🔥 Copy list supaya bisa remove saat match
+        var remainingC = new List<ExcelRecord>(l2);
 
-        var allKeys = dict1.Keys.Union(dict2.Keys);
-
-        foreach (var key in allKeys)
+        foreach (var a in l1)
         {
-            var l1 = dict1.ContainsKey(key) ? dict1[key] : new List<ExcelRecord>();
-            var l2 = dict2.ContainsKey(key) ? dict2[key] : new List<ExcelRecord>();
+            // 🔥 cari pasangan RefNo + Amount
+            var match = remainingC.FirstOrDefault(c => c.Amount == a.Amount);
 
-            int max = Math.Max(l1.Count, l2.Count);
-
-            for (int i = 0; i < max; i++)
+            if (match != null)
             {
-                var a = i < l1.Count ? l1[i] : null;
-                var c = i < l2.Count ? l2[i] : null;
-
-                string status = (a != null && c != null)
-                    ? "MATCH"
-                    : (a != null ? "ONLY_ANCHANTO" : "ONLY_CEGID");
-
+                // MATCH
                 result.Add(new ReconResult
                 {
-                    RefNo1 = a?.RefNo,
-                    Amount1 = a?.Amount,
-                    Date1 = a?.Date,
-                    RefNo2 = c?.RefNo,
-                    Amount2 = c?.Amount,
-                    Date2 = c?.Date,
-                    Status = status
+                    RefNo1 = a.RefNo,
+                    Amount1 = a.Amount,
+                    Date1 = a.Date,
+                    RefNo2 = match.RefNo,
+                    Amount2 = match.Amount,
+                    Date2 = match.Date,
+                    Status = "MATCH"
+                });
+
+                remainingC.Remove(match); // supaya tidak double match
+            }
+            else
+            {
+                // ONLY ANCHANTO
+                result.Add(new ReconResult
+                {
+                    RefNo1 = a.RefNo,
+                    Amount1 = a.Amount,
+                    Date1 = a.Date,
+                    RefNo2 = null,
+                    Amount2 = null,
+                    Date2 = null,
+                    Status = "ONLY_ANCHANTO"
                 });
             }
         }
-        
 
-        return result;
-        
+        // 🔹 sisa CEGID yang tidak match
+        foreach (var c in remainingC)
+        {
+            result.Add(new ReconResult
+            {
+                RefNo1 = null,
+                Amount1 = null,
+                Date1 = null,
+                RefNo2 = c.RefNo,
+                Amount2 = c.Amount,
+                Date2 = c.Date,
+                Status = "ONLY_CEGID"
+            });
+        }
     }
+
+    return result;
+}
 
     // ==========================
     // 🔹 MODELS
