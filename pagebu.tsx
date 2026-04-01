@@ -141,14 +141,11 @@ export default function Home() {
             <tbody>
               {currentData.map((d: any, i: number) => (
                 <tr key={i} className="border-t hover:bg-gray-50">
-                  <td className="p-3">{d.refNo}</td>
-                  <td className="p-3">{d.anchantoSKU}</td>
-                  <td className="p-3">{d.anchantoDate}</td>
-                  <td className="p-3">{d.cegidSKU}</td>
-                  <td className="p-3">{d.cegidDate}</td>
-                  <td className={`p-3 ${getStatusColor(d.status)}`}>
-                    {d.status}
-                  </td>
+                  <td className="p-3">{d.ref1 ?? d.ref2}</td>
+                  <td className="p-3">{d.amt1}</td>
+                  <td className="p-3">{d.date1}</td>
+                  <td className="p-3">{d.amt2}</td>
+                  <td className="p-3">{d.date2}</td>
                 </tr>
               ))}
             </tbody>
