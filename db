@@ -1,0 +1,12 @@
+b2b
+
+  CREATE TABLE reconciliation_detail (
+    id SERIAL PRIMARY KEY,
+    reconciliation_id INT,
+    ref_no TEXT,
+    anchanto_sku TEXT,
+    anchanto_date TIMESTAMP,
+    cegid_sku TEXT,
+    cegid_date TIMESTAMP,
+    status TEXT
+);
