@@ -1,0 +1,321 @@
+"use client";
+
+import { use, useState } from "react";
+
+interface Detail {
+  refNo: string;
+  Amount1: any;
+  Date1: string | null;
+  Amount2: any;
+  Date2: string | null;
+  Amount3 : any;
+  Date3: string | null;
+  status: string;
+}
+
+export default function Home() {
+  const [file1, setFile1] = useState<File | null>(null);
+  const [file2, setFile2] = useState<File | null>(null);
+  const [file3, setFile3] = useState<File | null>(null);
+  const [result, setResult] = useState<{details: Detail[], summary: any, reconciliationId: number} | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+  const [filter, setFilter] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  // ========================
+  // 🔹 Upload 3 Excel
+  // ========================
+  const handleUpload = async () => {
+    if (!file1 || !file2 || !file3) {
+      alert("Harus pilih 3 file!");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file1", file1);
+    formData.append("file2", file2);
+    formData.append("file3",file3);
+
+    try {
+      setLoading(true);
+      const res = await fetch("http://localhost:5077/reconciliations/upload-3", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        alert("Server error: " + text);
+        return;
+      }
+
+      const data = await res.json();
+      setResult(data);
+      setCurrentPage(1);
+    } catch (err) {
+      console.error(err);
+      alert("Error upload");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========================
+  // 🔹 Format date
+  // ========================
+  const formatDate = (date: string | null) => {
+    if (!date) return "-";
+    return new Date(date).toLocaleString();
+  };
+
+  // ========================
+  // 🔹 Status color
+  // ========================
+  const getStatusColor = (status: string) => {
+  switch (status) {
+    case "MATCH_ALL": return "text-green-600 font-semibold"; // Sesuaikan dengan Backend
+    case "PARTIAL_MATCH": return "text-yellow-600 font-semibold";
+    case "ONLY_ONE_SOURCE": return "text-red-600 font-semibold";
+    default: return "";
+  }
+};
+
+  // ========================
+  // 🔹 Filter & Pagination
+  // ========================
+  const filteredDetails: Detail[] = result
+  ? result.details.filter((d: any) => {
+      const keyword = search.trim().toLowerCase();
+
+      const refNo = d.refNo?.toLowerCase() || "";
+      const amount1 = d.amount1?.toString().toLowerCase() || "";
+      const amount2 = d.amount2?.toString().toLowerCase() || "";
+      const amount3 = d.amount3?.toString().toLowerCase() || "";
+
+      const matchSearch =
+        keyword === "" ||
+        refNo.includes(keyword) ||
+        amount1.includes(keyword) ||
+        amount2.includes(keyword) ||
+        amount3.includes(keyword);
+
+      const matchStatus = !filter || d.status === filter;
+
+      return matchSearch && matchStatus;
+    })
+  : [];
+
+  const totalPages = Math.ceil((filteredDetails?.length ?? 0) / itemsPerPage);
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentData = filteredDetails?.slice(indexOfFirstItem, indexOfLastItem) ?? [];
+
+  const handleFilter = (value: string | null) => {
+    setFilter(value);
+    setCurrentPage(1);
+  };
+
+  // ========================
+  // 🔹 Download Excel
+  // ========================
+ const handleDownload = async () => {
+  if (!result) return;
+
+  try {
+    const res = await fetch(
+      `http://localhost:5077/reconciliationsPO/download/${result.reconciliationId}`
+    );
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error("ERROR RESPONSE:", text);
+      alert("Server error: " + text);
+      return;
+    }
+
+    const blob = await res.blob();
+
+    // 🔥 debug size
+    console.log("Blob size:", blob.size);
+
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `rekonsiliasi_${result.reconciliationId}.xlsx`;
+
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+
+  } catch (err) {
+    console.error(err);
+    // console.log("ID dikirim:", result.reconciliationId);
+    alert("Gagal download file");
+  }
+};
+
+  // ========================
+  // 🔹 JSX
+  // ========================
+  return (
+    <main className="flex justify-center items-start p-6">
+      <div className="w-full max-w-6xl">
+        <h1 className="text-2xl font-bold text-center mb-8">Reconciliation PO VIRTUAL</h1>
+
+        {/* Upload */}
+        <div className="mb-8">
+          <h2 className="text-xl font-semibold mb-2">Upload Files</h2>
+          <div className="grid md:grid-cols-2 gap-4 mb-4">
+            <input type="file" onChange={(e) => setFile1(e.target.files?.[0] ?? null)} className="border p-2 rounded"/>
+            <input type="file" onChange={(e) => setFile2(e.target.files?.[0] ?? null)} className="border p-2 rounded"/>
+            <input type="file" onChange={(e) => setFile3(e.target.files?.[0] ?? null)} className="border p-2 rounded"/>
+          </div>
+          <button onClick={handleUpload} disabled={loading} className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50">
+            {loading ? "Uploading..." : "Upload"}
+          </button>
+        </div>
+
+        {/* Summary */}
+        {result && (
+  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+    
+    {/* Card: ALL */}
+    <div 
+      onClick={() => handleFilter(null)} 
+      className={`p-4 rounded cursor-pointer border-2 transition ${!filter ? 'border-blue-500 bg-blue-50' : 'border-transparent bg-gray-50 hover:bg-gray-100'}`}
+    >
+      <p className="text-sm">All Records</p>
+      <p className="text-lg font-bold">{result?.details?.length ?? 0}</p>
+    </div>
+
+    {/* Card: MATCH_ALL */}
+    <div 
+      onClick={() => handleFilter("MATCH_ALL")} 
+      className={`p-4 rounded cursor-pointer border-2 transition ${filter === "MATCH_ALL" ? 'border-green-500 bg-green-50' : 'border-transparent bg-green-50 hover:bg-green-100'}`}
+    >
+      <p className="text-sm">Matched (All 3)</p>
+      <p className="text-lg font-bold text-green-600">
+        {result?.summary?.matchAll ?? 0}
+      </p>
+    </div>
+
+    {/* Card: PARTIAL_MATCH */}
+    {/* Note: Di backend Anda, mismatch = partial + onlyOne. Biasanya user ingin klik partial saja */}
+    <div 
+      onClick={() => handleFilter("PARTIAL_MATCH")} 
+      className={`p-4 rounded cursor-pointer border-2 transition ${filter === "PARTIAL_MATCH" ? 'border-yellow-500 bg-yellow-50' : 'border-transparent bg-yellow-50 hover:bg-yellow-100'}`}
+    >
+      <p className="text-sm">Partial Match</p>
+      <p className="text-lg font-bold text-yellow-600">
+        {result?.summary?.partial ?? 0}
+      </p>
+    </div>
+
+    {/* Card: ONLY_ONE_SOURCE */}
+    <div 
+      onClick={() => handleFilter("ONLY_ONE_SOURCE")} 
+      className={`p-4 rounded cursor-pointer border-2 transition ${filter === "ONLY_ONE_SOURCE" ? 'border-red-500 bg-red-50' : 'border-transparent bg-red-50 hover:bg-red-100'}`}
+    >
+      <p className="text-sm">Only One Source</p>
+      <p className="text-lg font-bold text-red-600">
+        {result?.summary?.onlyOne ?? 0}
+      </p>
+    </div>
+
+    {/* Card: Total Mismatch (Optional) */}
+    <div className="bg-gray-800 p-4 rounded text-white">
+      <p className="text-sm opacity-80">Total Mismatch</p>
+      <p className="text-lg font-bold">
+        {result?.summary?.mismatch ?? 0}
+      </p>
+    </div>
+
+  </div>
+)}
+
+
+        {/* Download Button */}
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+
+        {/* Search */}
+        <input
+            type="text"
+            placeholder="Search Ref No / SKU..."
+            value={search}
+            onChange={(e) => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+            }}
+            className="border p-2 rounded w-full md:w-1/3"
+        />
+
+        {/* Download Button */}
+        {result && (
+            <button
+            onClick={handleDownload}
+            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 w-full md:w-auto"
+            >
+            Download Excel
+            </button>
+        )}
+
+        </div>
+
+        {/* Table */}
+        {result && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm border">
+              <thead className="bg-gray-100">
+                <tr>
+                  <th className="p-2 border">Ref No</th>
+                  <th className="p-2 border">Transfer Notice</th>
+                  <th className="p-2 border">TN Date</th>
+                  <th className="p-2 border">Consignment</th>
+                  <th className="p-2 border">Consignment Date</th>
+                  <th className="p-2 border">Received</th>
+                  <th className="p-2 border">Received Date</th>
+                  <th className="p-2 border">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currentData.map((d, idx) => (
+                  <tr key={idx} className="text-center">
+                    <td className="p-2 border">{d.refNo}</td>
+                    <td className="p-2 border">{d.amount1 ?? "-"}</td>
+                    <td className="p-2 border">{formatDate(d.date1)}</td>
+                    <td className="p-2 border">{d.amount2 ?? "-"}</td>
+                    <td className="p-2 border">{formatDate(d.date2)}</td>
+                    <td className="p-2 border">{d.amount3 ?? "-"}</td>
+                    <td className="p-2 border">{formatDate(d.date3)}</td>
+                    <td className={`p-2 border ${getStatusColor(d.status)}`}>{d.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            {/* Pagination */}
+            <div className="flex justify-between items-center mt-4 px-2">
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                disabled={currentPage === 1}
+                className="px-3 py-1 border rounded disabled:opacity-50"
+              >
+                Prev
+              </button>
+              <span className="text-sm text-gray-600">Page {currentPage} of {totalPages}</span>
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                disabled={currentPage === totalPages || totalPages === 0}
+                className="px-3 py-1 border rounded disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </main>
+  );
+}
