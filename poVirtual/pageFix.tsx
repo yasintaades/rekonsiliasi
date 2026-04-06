@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
+import Sidebar from "../../components/layouts/Sidebar";
 
 interface Detail {
   refNo: string;
@@ -136,40 +137,25 @@ const matchDate =
   // ========================
   // 🔹 Download Excel
   // ========================
- const handleDownload = async () => {
+  const handleDownload = async () => {
   if (!result) return;
 
-  try {
-    const res = await fetch(
-      `http://localhost:5077/reconciliationsPO/download/${result.reconciliationId}`
-    );
+  const params = new URLSearchParams();
 
-    if (!res.ok) {
-      const text = await res.text();
-      console.error("ERROR RESPONSE:", text);
-      alert("Server error: " + text);
-      return;
-    }
+  if (search) params.append("search", search);
+  if (filter) params.append("status", filter);
+  if (startDate) params.append("startDate", startDate);
+  if (endDate) params.append("endDate", endDate);
 
-    const blob = await res.blob();
+  const url = `http://localhost:5077/reconciliationsPO/download/${result.reconciliationId}?${params.toString()}`;
 
-    // 🔥 debug size
-    console.log("Blob size:", blob.size);
+  const res = await fetch(url);
+  const blob = await res.blob();
 
-    const url = window.URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `rekonsiliasi_${result.reconciliationId}.xlsx`;
-
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-
-  } catch (err) {
-    console.error(err);
-    // console.log("ID dikirim:", result.reconciliationId);
-    alert("Gagal download file");
-  }
+  const link = document.createElement("a");
+  link.href = window.URL.createObjectURL(blob);
+  link.download = `rekonsiliasi_${result.reconciliationId}.xlsx`;
+  link.click();
 };
 
   // ========================
@@ -177,6 +163,7 @@ const matchDate =
   // ========================
   return (
     <main className="flex justify-center items-start p-6">
+      {/* <Sidebar/> */}
       <div className="w-full max-w-6xl">
         <h1 className="text-2xl font-bold text-center mb-8">Reconciliation PO VIRTUAL</h1>
 
@@ -195,100 +182,98 @@ const matchDate =
 
         {/* Summary */}
         {result && (
-  <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
     
-    {/* Card: ALL */}
-    <div 
-      onClick={() => handleFilter(null)} 
-      className={`p-4 rounded cursor-pointer border-2 transition ${!filter ? 'border-blue-500 bg-blue-50' : 'border-transparent bg-gray-50 hover:bg-gray-100'}`}
-    >
-      <p className="text-sm">All Records</p>
-      <p className="text-lg font-bold">{result?.details?.length ?? 0}</p>
-    </div>
+          {/* Card: ALL */}
+          <div 
+            onClick={() => handleFilter(null)} 
+            className={`p-4 rounded cursor-pointer border-2 transition ${!filter ? 'border-blue-500 bg-blue-50' : 'border-transparent bg-gray-50 hover:bg-gray-100'}`}
+          >
+            <p className="text-sm">All Records</p>
+            <p className="text-lg font-bold">{result?.details?.length ?? 0}</p>
+          </div>
 
-    {/* Card: MATCH_ALL */}
-    <div 
-      onClick={() => handleFilter("MATCH_ALL")} 
-      className={`p-4 rounded cursor-pointer border-2 transition ${filter === "MATCH_ALL" ? 'border-green-500 bg-green-50' : 'border-transparent bg-green-50 hover:bg-green-100'}`}
-    >
-      <p className="text-sm">Matched (All 3)</p>
-      <p className="text-lg font-bold text-green-600">
-        {result?.summary?.matchAll ?? 0}
-      </p>
-    </div>
+          {/* Card: MATCH_ALL */}
+          <div 
+            onClick={() => handleFilter("MATCH_ALL")} 
+            className={`p-4 rounded cursor-pointer border-2 transition ${filter === "MATCH_ALL" ? 'border-green-500 bg-green-50' : 'border-transparent bg-green-50 hover:bg-green-100'}`}
+          >
+            <p className="text-sm">Matched (All 3)</p>
+            <p className="text-lg font-bold text-green-600">
+              {result?.summary?.matchAll ?? 0}
+            </p>
+          </div>
 
-    {/* Card: PARTIAL_MATCH */}
-    {/* Note: Di backend Anda, mismatch = partial + onlyOne. Biasanya user ingin klik partial saja */}
-    <div 
-      onClick={() => handleFilter("PARTIAL_MATCH")} 
-      className={`p-4 rounded cursor-pointer border-2 transition ${filter === "PARTIAL_MATCH" ? 'border-yellow-500 bg-yellow-50' : 'border-transparent bg-yellow-50 hover:bg-yellow-100'}`}
-    >
-      <p className="text-sm">Partial Match</p>
-      <p className="text-lg font-bold text-yellow-600">
-        {result?.summary?.partial ?? 0}
-      </p>
-    </div>
+          {/* Card: PARTIAL_MATCH */}
+          {/* Note: Di backend Anda, mismatch = partial + onlyOne. Biasanya user ingin klik partial saja */}
+          <div 
+            onClick={() => handleFilter("PARTIAL_MATCH")} 
+            className={`p-4 rounded cursor-pointer border-2 transition ${filter === "PARTIAL_MATCH" ? 'border-yellow-500 bg-yellow-50' : 'border-transparent bg-yellow-50 hover:bg-yellow-100'}`}
+          >
+            <p className="text-sm">Partial Match</p>
+            <p className="text-lg font-bold text-yellow-600">
+              {result?.summary?.partial ?? 0}
+            </p>
+          </div>
 
-    {/* Card: ONLY_ONE_SOURCE */}
-    <div 
-      onClick={() => handleFilter("ONLY_ONE_SOURCE")} 
-      className={`p-4 rounded cursor-pointer border-2 transition ${filter === "ONLY_ONE_SOURCE" ? 'border-red-500 bg-red-50' : 'border-transparent bg-red-50 hover:bg-red-100'}`}
-    >
-      <p className="text-sm">Only One Source</p>
-      <p className="text-lg font-bold text-red-600">
-        {result?.summary?.onlyOne ?? 0}
-      </p>
-    </div>
+          {/* Card: ONLY_ONE_SOURCE */}
+          <div 
+            onClick={() => handleFilter("ONLY_ONE_SOURCE")} 
+            className={`p-4 rounded cursor-pointer border-2 transition ${filter === "ONLY_ONE_SOURCE" ? 'border-red-500 bg-red-50' : 'border-transparent bg-red-50 hover:bg-red-100'}`}
+          >
+            <p className="text-sm">Only One Source</p>
+            <p className="text-lg font-bold text-red-600">
+              {result?.summary?.onlyOne ?? 0}
+            </p>
+          </div>
 
-    {/* Card: Total Mismatch (Optional) */}
-    <div className="bg-gray-800 p-4 rounded text-white">
-      <p className="text-sm opacity-80">Total Mismatch</p>
-      <p className="text-lg font-bold">
-        {result?.summary?.mismatch ?? 0}
-      </p>
-    </div>
+          {/* Card: Total Mismatch (Optional) */}
+          <div className="bg-gray-800 p-4 rounded text-white">
+            <p className="text-sm opacity-80">Total Mismatch</p>
+            <p className="text-lg font-bold">
+              {result?.summary?.mismatch ?? 0}
+            </p>
+          </div>
 
-  </div>
-)}
+        </div>
+       )}
 
 
         {/* Download Button */}
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
 
-        {/* Search */}
-        <input
-            type="text"
-            placeholder="Search Ref No / SKU..."
-            value={search}
-            onChange={(e) => {
-            setSearch(e.target.value);
-            setCurrentPage(1);
-            }}
-            className="border p-2 rounded w-full md:w-1/3"
-        />
+          {/* Search */}
+          <input
+              type="text"
+              placeholder="Search Ref No / SKU..."
+              value={search}
+              onChange={(e) => {
+              setSearch(e.target.value);
+              setCurrentPage(1);
+              }}
+              className="border p-2 rounded w-full md:w-1/3"
+          />
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => setStartDate(e.target.value)}
+          />
 
-        <input
-  type="date"
-  value={startDate}
-  onChange={(e) => setStartDate(e.target.value)}
-/>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => setEndDate(e.target.value)}
+          />
 
-<input
-  type="date"
-  value={endDate}
-  onChange={(e) => setEndDate(e.target.value)}
-/>
-
-        {/* Download Button */}
-        {result && (
-            <button
-            onClick={handleDownload}
-            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 w-full md:w-auto"
-            >
-            Download Excel
-            </button>
-        )}
-
+          {/* Download Button */}
+          {result && (
+              <button
+              onClick={handleDownload}
+              className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 w-full md:w-auto"
+              >
+              Download Excel
+              </button>
+          )}
         </div>
 
         {/* Table */}
