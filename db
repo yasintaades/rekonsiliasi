@@ -1,12 +1,23 @@
-b2b
-
-  CREATE TABLE reconciliation_detail (
-    id SERIAL PRIMARY KEY,
+CREATE TABLE reconciliation_details_3 ( 
+    id SERIAL PRIMARY KEY,  -- 🔥 AUTO INCREMENT
     reconciliation_id INT,
-    ref_no TEXT,
-    anchanto_sku TEXT,
-    anchanto_date TIMESTAMP,
-    cegid_sku TEXT,
-    cegid_date TIMESTAMP,
-    status TEXT
+    ref_no VARCHAR(50),
+
+    sku_transfer_notice VARCHAR(50),
+    date_transfer_notice TIMESTAMP, 
+    qty_transfer_notice INT,
+
+    sku_consignment VARCHAR(50),
+    date_consignment TIMESTAMP,
+    qty_consignment INT,
+
+    sku_received VARCHAR(50),
+    date_received TIMESTAMP,
+    qty_received INT,
+
+    status VARCHAR(20),
+
+    CONSTRAINT FK_reconciliation
+    FOREIGN KEY (reconciliation_id)
+    REFERENCES reconciliations(id)
 );
