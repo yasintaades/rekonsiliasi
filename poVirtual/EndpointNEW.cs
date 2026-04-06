@@ -35,6 +35,7 @@ public static class ReconPOVEndpoints
                     if (string.IsNullOrWhiteSpace(refNo)) continue;
 
                     var amount = row[1]?.ToString();
+        
 
                     DateTime? trxDate = null;
                     if (DateTime.TryParse(row[2]?.ToString(), out var d))
@@ -160,114 +161,175 @@ public static class ReconPOVEndpoints
 
         }).DisableAntiforgery();
         
-        app.MapGet("/reconciliationsPO/download/{id}", async (int id, IConfiguration config) =>
-{
-    var connString = config.GetConnectionString("Default");
-    var list = new List<ReconciliationDetail3>();
-
-    // ========================
-    // 🔹 GET DATA FROM DB
-    // ========================
-    using (var conn = new NpgsqlConnection(connString))
-    {
-        await conn.OpenAsync();
-
-        var cmd = new NpgsqlCommand(@"
-            SELECT ref_no, amount1, date1, amount2, date2, amount3, date3, status
-            FROM reconciliation_details_3
-            WHERE reconciliation_id = @id
-            ORDER BY ref_no
-        ", conn);
-
-        cmd.Parameters.AddWithValue("id", id);
-
-        using var reader = await cmd.ExecuteReaderAsync();
-
-        while (await reader.ReadAsync())
+        app.MapGet("/reconciliationsPO/download/{id}", async (
+            int id, 
+            string? search,
+            string? filter,
+            DateTime? startDate,
+            DateTime? endDate,
+            IConfiguration config) =>
         {
-            list.Add(new ReconciliationDetail3
+            var connString = config.GetConnectionString("Default");
+            var list = new List<ReconciliationDetail3>();
+
+            // ========================
+            // 🔹 GET DATA FROM DB
+            // ========================
+            using (var conn = new NpgsqlConnection(connString))
             {
-                RefNo = reader["ref_no"]?.ToString() ?? "",
-                Amount1 = reader["amount1"] == DBNull.Value ? null : (string)reader["amount1"],
-                Date1 = reader["date1"] == DBNull.Value ? null : (DateTime?)reader["date1"],
-                Amount2 = reader["amount2"] == DBNull.Value ? null : (string?)reader["amount2"],
-                Date2 = reader["date2"] == DBNull.Value ? null : (DateTime?)reader["date2"],
-                Amount3 = reader["amount3"] == DBNull.Value ? null : (string?)reader["amount3"],
-                Date3 = reader["date3"] == DBNull.Value ? null : (DateTime?)reader["date3"],
-                Status = reader["status"]?.ToString() ?? ""
-            });
-        }
-    }
+                await conn.OpenAsync();
 
-    // ========================
-    // 🔹 VALIDASI DATA
-    // ========================
-    if (list.Count == 0)
-    {
-        return Results.BadRequest("Data tidak ditemukan / kosong");
-    }
+                var sql = @"
+                    SELECT ref_no, amount1, date1, amount2, date2, amount3, date3, status
+                    FROM reconciliation_details_3
+                    WHERE reconciliation_id = @id
+                ";
 
-    // ========================
-    // 🔹 CREATE EXCEL
-    // ========================
-    using var workbook = new XLWorkbook();
-    var ws = workbook.Worksheets.Add("Reconciliation");
+                // search
+                if (!string.IsNullOrEmpty(search))
+                {
+                    sql += @"
+                        AND (
+                            ref_no ILIKE @search OR
+                            amount1 ILIKE @search OR
+                            amount2 ILIKE @search OR
+                            amount3 ILIKE @search
+                        )
+                    ";
+                }
 
-    // Header
-    ws.Cell(1, 1).Value = "Ref No";
-    ws.Cell(1, 2).Value = "SKU Transfer Notice";
-    ws.Cell(1, 3).Value = "Date Transfer Notice";
-    ws.Cell(1, 4).Value = "SKU Consignment";
-    ws.Cell(1, 5).Value = "Date Consignment";
-    ws.Cell(1, 6).Value = "SKU Received";
-    ws.Cell(1, 7).Value = "Date Received";
-    ws.Cell(1, 8).Value = "Status";
+                // status
+                if (!string.IsNullOrEmpty(filter))
+                {
+                    sql += " AND status = @status";
+                }
 
-    // Styling header
-    var headerRange = ws.Range(1, 1, 1, 8);
-    headerRange.Style.Font.Bold = true;
+                // date range (optional, based on date1 for example)
+                if (startDate.HasValue)
+                {
+                    sql += " AND date1 >= @startDate";
+                }
 
-    // Data
-    for (int i = 0; i < list.Count; i++)
-    {
-        var d = list[i];
+                if (endDate.HasValue)
+                {
+                    sql += " AND date1 <= @endDate";
+                }
 
-        ws.Cell(i + 2, 1).Value = d.RefNo;
-        ws.Cell(i + 2, 2).Value = d.Amount1;
-        ws.Cell(i + 2, 3).Value = d.Date1;
-        ws.Cell(i + 2, 4).Value = d.Amount2;
-        ws.Cell(i + 2, 5).Value = d.Date2;
-        ws.Cell(i + 2, 6).Value = d.Amount3;
-        ws.Cell(i + 2, 7).Value = d.Date3;
-        ws.Cell(i + 2, 8).Value = d.Status;
+                sql += " ORDER BY ref_no";
 
-        // 🔥 warna status
-        var row = ws.Row(i + 2);
-        if (d.Status == "MATCH_ALL")
-            row.Style.Fill.BackgroundColor = XLColor.LightGreen;
-        else if (d.Status == "PARTIAL_MATCH")
-            row.Style.Fill.BackgroundColor = XLColor.LightYellow;
-        else if (d.Status == "ONLY_ONE_SOURCE")
-            row.Style.Fill.BackgroundColor = XLColor.LightPink;
-    }
+                var cmd = new NpgsqlCommand(sql, conn);
 
-    // Auto width
-    ws.Columns().AdjustToContents();
+                cmd.Parameters.AddWithValue("id", id);
 
-    // ========================
-    // 🔹 STREAM FILE
-    // ========================
-    var stream = new MemoryStream();
-    workbook.SaveAs(stream);
+                // parameter
+                if (!string.IsNullOrEmpty(search))
+                {
+                    cmd.Parameters.AddWithValue("search", $"%{search}%");
+                }
 
-    stream.Position = 0; // 🔥 WAJIB
+                if (!string.IsNullOrEmpty(filter))
+                {
+                    cmd.Parameters.AddWithValue("status", filter);
+                }
 
-    return Results.File(
-        stream,
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        $"reconciliation_{id}.xlsx"
-    );
-});
+                if (startDate.HasValue)
+                {
+                    cmd.Parameters.AddWithValue("startDate", startDate.Value.Date);
+                }
+
+                if (endDate.HasValue)
+                {
+                    cmd.Parameters.AddWithValue("endDate", endDate.Value.Date);
+                }
+
+                using var reader = await cmd.ExecuteReaderAsync();
+
+                while (await reader.ReadAsync())
+                {
+                    list.Add(new ReconciliationDetail3
+                    {
+                        RefNo = reader["ref_no"]?.ToString() ?? "",
+                        Amount1 = reader["amount1"] == DBNull.Value ? null : (string)reader["amount1"],
+                        Date1 = reader["date1"] == DBNull.Value ? null : (DateTime?)reader["date1"],
+                        Amount2 = reader["amount2"] == DBNull.Value ? null : (string?)reader["amount2"],
+                        Date2 = reader["date2"] == DBNull.Value ? null : (DateTime?)reader["date2"],
+                        Amount3 = reader["amount3"] == DBNull.Value ? null : (string?)reader["amount3"],
+                        Date3 = reader["date3"] == DBNull.Value ? null : (DateTime?)reader["date3"],
+                        Status = reader["status"]?.ToString() ?? ""
+                    });
+                }
+            }
+
+            // ========================
+            // 🔹 VALIDASI DATA
+            // ========================
+            if (list.Count == 0)
+            {
+                return Results.BadRequest("Data tidak ditemukan / kosong");
+            }
+
+            // ========================
+            // 🔹 CREATE EXCEL
+            // ========================
+            using var workbook = new XLWorkbook();
+            var ws = workbook.Worksheets.Add("Reconciliation");
+
+            // Header
+            ws.Cell(1, 1).Value = "Ref No";
+            ws.Cell(1, 2).Value = "SKU Transfer Notice";
+            ws.Cell(1, 3).Value = "Date Transfer Notice";
+            ws.Cell(1, 4).Value = "SKU Consignment";
+            ws.Cell(1, 5).Value = "Date Consignment";
+            ws.Cell(1, 6).Value = "SKU Received";
+            ws.Cell(1, 7).Value = "Date Received";
+            ws.Cell(1, 8).Value = "Status";
+
+            // Styling header
+            var headerRange = ws.Range(1, 1, 1, 8);
+            headerRange.Style.Font.Bold = true;
+
+            // Data
+            for (int i = 0; i < list.Count; i++)
+            {
+                var d = list[i];
+
+                ws.Cell(i + 2, 1).Value = d.RefNo;
+                ws.Cell(i + 2, 2).Value = d.Amount1;
+                ws.Cell(i + 2, 3).Value = d.Date1;
+                ws.Cell(i + 2, 4).Value = d.Amount2;
+                ws.Cell(i + 2, 5).Value = d.Date2;
+                ws.Cell(i + 2, 6).Value = d.Amount3;
+                ws.Cell(i + 2, 7).Value = d.Date3;
+                ws.Cell(i + 2, 8).Value = d.Status;
+
+                // 🔥 warna status
+                var row = ws.Row(i + 2);
+                if (d.Status == "MATCH_ALL")
+                    row.Style.Fill.BackgroundColor = XLColor.LightGreen;
+                else if (d.Status == "PARTIAL_MATCH")
+                    row.Style.Fill.BackgroundColor = XLColor.LightYellow;
+                else if (d.Status == "ONLY_ONE_SOURCE")
+                    row.Style.Fill.BackgroundColor = XLColor.LightPink;
+            }
+
+            // Auto width
+            ws.Columns().AdjustToContents();
+
+            // ========================
+            // 🔹 STREAM FILE
+            // ========================
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+
+            var content = stream.ToArray(); // 🔥 convert ke byte[]
+
+            return Results.File(
+                content,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                $"reconciliation_{id}.xlsx"
+            );
+
+        });
     }
     
 }
