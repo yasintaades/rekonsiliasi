@@ -23,6 +23,8 @@ export default function Home() {
   const itemsPerPage = 10;
   const [filter, setFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   // ========================
   // 🔹 Upload 3 Excel
@@ -103,7 +105,21 @@ export default function Home() {
 
       const matchStatus = !filter || d.status === filter;
 
-      return matchSearch && matchStatus;
+
+      // filter by date range (optional)
+     const dates = [d.date1, d.date2, d.date3]
+  .filter(Boolean)
+  .map((dt: string) => new Date(dt));
+
+const matchDate =
+  dates.length === 0 ||
+  dates.some((dt) => {
+    return (
+      (!startDate || dt >= new Date(startDate)) &&
+      (!endDate || dt <= new Date(endDate))
+    );
+  });
+        return matchSearch && matchStatus && matchDate;
     })
   : [];
 
@@ -250,6 +266,18 @@ export default function Home() {
             }}
             className="border p-2 rounded w-full md:w-1/3"
         />
+
+        <input
+  type="date"
+  value={startDate}
+  onChange={(e) => setStartDate(e.target.value)}
+/>
+
+<input
+  type="date"
+  value={endDate}
+  onChange={(e) => setEndDate(e.target.value)}
+/>
 
         {/* Download Button */}
         {result && (
