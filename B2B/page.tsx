@@ -20,6 +20,8 @@ export default function Home() {
   const itemsPerPage = 10;
   const [filter, setFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
   // ========================
   // 🔹 Upload 2 Excel
@@ -87,22 +89,33 @@ export default function Home() {
       const keyword = search.trim().toLowerCase();
 
       const refNo = d.refNo?.toLowerCase() || "";
-      const amount1 = d.amount1?.toString().toLowerCase() || "";
-      const amount2 = d.amount2?.toString().toLowerCase() || "";
-      const amount3 = d.amount3?.toString().toLowerCase() || "";
+      const skuCegid = d.skuCegid?.toString().toLowerCase() || "";
+      const skuAnchanto = d.skuAnchanto?.toString().toLowerCase() || "";
 
       const matchSearch =
         keyword === "" ||
         refNo.includes(keyword) ||
-        amount1.includes(keyword) ||
-        amount2.includes(keyword) ||
-        amount3.includes(keyword);
+        skuCegid.includes(keyword) ||
+        skuAnchanto.includes(keyword);
 
       const matchStatus = !filter || d.status === filter;
 
-      return matchSearch && matchStatus;
-    })
-  : [];
+       // filter by date range (optional)
+     const dates = [d.anchantoDate, d.cegidDate]
+      .filter(Boolean)
+      .map((dt: string) => new Date(dt));
+
+    const matchDate =
+      dates.length === 0 ||
+      dates.some((dt) => {
+        return (
+          (!startDate || dt >= new Date(startDate)) &&
+          (!endDate || dt <= new Date(endDate))
+        );
+      });
+            return matchSearch && matchStatus && matchDate;
+        })
+      : [];
 
   const totalPages = Math.ceil((filteredDetails?.length ?? 0) / itemsPerPage);
   const indexOfLastItem = currentPage * itemsPerPage;
@@ -118,25 +131,25 @@ export default function Home() {
   // 🔹 Download Excel
   // ========================
   const handleDownload = async () => {
-    if (!result) return;
+  if (!result) return;
 
-    try {
-      const res = await fetch(
-        `http://localhost:5077/reconciliations/download/${result.reconciliationId}`
-      );
-      if (!res.ok) throw new Error("Gagal download file");
+  const params = new URLSearchParams();
 
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = `rekonsiliasi_${result.reconciliationId}.xlsx`;
-      link.click();
-    } catch (err) {
-      console.error(err);
-      alert("Gagal download file");
-    }
-  };
+  if (search) params.append("search", search);
+  if (filter) params.append("status", filter);
+  if (startDate) params.append("startDate", startDate);
+  if (endDate) params.append("endDate", endDate);
+
+  const url = `http://localhost:5077/reconciliations/download/${result.reconciliationId}?${params.toString()}`;
+
+  const res = await fetch(url);
+  const blob = await res.blob();
+
+  const link = document.createElement("a");
+  link.href = window.URL.createObjectURL(blob);
+  link.download = `rekonsiliasi_${result.reconciliationId}.xlsx`;
+  link.click();
+};
 
   // ========================
   // 🔹 JSX
@@ -209,6 +222,18 @@ export default function Home() {
             setCurrentPage(1);
             }}
             className="border p-2 rounded w-full md:w-1/3"
+        />
+
+        <input
+          type="date"
+          value={startDate}
+          onChange={(e) => setStartDate(e.target.value)}
+        />
+
+        <input
+          type="date"
+          value={endDate}
+          onChange={(e) => setEndDate(e.target.value)}
         />
 
         {/* Download Button */}
