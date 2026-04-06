@@ -19,6 +19,7 @@ export default function Home() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
   const [filter, setFilter] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   // ========================
   // 🔹 Upload 2 Excel
@@ -82,10 +83,27 @@ export default function Home() {
   // 🔹 Filter & Pagination
   // ========================
   const filteredDetails: Detail[] = result
-  ? filter
-    ? result.details.filter((d) => d.status === filter)
-    : result.details
+  ? result.details.filter((d: any) => {
+      const keyword = search.trim().toLowerCase();
+
+      const refNo = d.refNo?.toLowerCase() || "";
+      const amount1 = d.amount1?.toString().toLowerCase() || "";
+      const amount2 = d.amount2?.toString().toLowerCase() || "";
+      const amount3 = d.amount3?.toString().toLowerCase() || "";
+
+      const matchSearch =
+        keyword === "" ||
+        refNo.includes(keyword) ||
+        amount1.includes(keyword) ||
+        amount2.includes(keyword) ||
+        amount3.includes(keyword);
+
+      const matchStatus = !filter || d.status === filter;
+
+      return matchSearch && matchStatus;
+    })
   : [];
+
   const totalPages = Math.ceil((filteredDetails?.length ?? 0) / itemsPerPage);
   const indexOfLastItem = currentPage * itemsPerPage;
   const indexOfFirstItem = indexOfLastItem - itemsPerPage;
@@ -179,12 +197,31 @@ export default function Home() {
           </div>
         )}
 
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+
+        {/* Search */}
+        <input
+            type="text"
+            placeholder="Search Ref No / SKU..."
+            value={search}
+            onChange={(e) => {
+            setSearch(e.target.value);
+            setCurrentPage(1);
+            }}
+            className="border p-2 rounded w-full md:w-1/3"
+        />
+
         {/* Download Button */}
         {result && (
-          <div className="flex justify-end mb-4">
-            <button onClick={handleDownload} className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700">Download Excel</button>
-          </div>
+            <button
+            onClick={handleDownload}
+            className="bg-green-600 text-white px-6 py-2 rounded-lg hover:bg-green-700 w-full md:w-auto"
+            >
+            Download Excel
+            </button>
         )}
+
+        </div>
 
         {/* Table */}
         {result && (
