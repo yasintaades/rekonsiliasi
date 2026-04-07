@@ -5,13 +5,19 @@ import { use, useState } from "react";
 interface Detail {
   refNo: string;
 
+  marketplace: string | null;
+  itemName: string | null;
   skuAnchanto: string | null;
   qtyAnchanto: number | null;
   dateAnchanto: string | null;
 
+  senderSite: string | null;
+  receiveSite: string | null;
   skuCegid: string | null;
+  itemNameCegid: string | null;
   qtyCegid: number | null;
   dateCegid: string | null;
+  unitCOGS: number | null;
 
   status: string;
 }
@@ -106,7 +112,7 @@ export default function Home() {
 
 
       // filter by date range (optional)
-     const dates = [d.dateTransfer, d.dateConsignment, d.dateReceived]
+     const dates = [d.dateAnchanto, d.dateCegid]
     .filter(Boolean)
     .map((dt: string) => new Date(dt));
 
@@ -282,34 +288,46 @@ export default function Home() {
                 <tr className="bg-gray-300 text-center font-bold">
                   <th className="p-2 border" rowSpan={2}>Ref No</th>
 
-                  <th className="p-2 border bg-blue-200" colSpan={3}>ANCHANTO</th>
-                  <th className="p-2 border bg-yellow-200" colSpan={3}>CEGID</th>
+                  <th className="p-2 border bg-blue-200" colSpan={5}>ANCHANTO</th>
+                  <th className="p-2 border bg-yellow-200" colSpan={7}>CEGID</th>
                   <th className="p-2 border" rowSpan={2}>Status</th>
                 </tr>
 
                 {/* 🔥 ROW 2: DETAIL HEADER */}
                 <tr className="bg-gray-100 text-center">
                   {/* ANCAHNTO */}
+                  <th className="p-2 border">Marketplace</th>
                   <th className="p-2 border">SKU Anchanto</th>
+                  <th className="p-2 border">Item Name</th>
                   <th className="p-2 border">Date Anchanto</th>
                   <th className="p-2 border">Stock Anchanto</th>
 
                   {/* CEGID */}
+                  <th className="p-2 border">Sender Site</th>
+                  <th className="p-2 border">Receive Site</th>
                   <th className="p-2 border">SKU Cegid</th>
+                  <th className="p-2 border">Item Name</th>
                   <th className="p-2 border">Date Cegid</th>
                   <th className="p-2 border">Stock Cegid</th>
+                  <th className="p-2 border">GI Unit COGS</th>
                 </tr>
               </thead>
               <tbody>
                 {currentData.map((d, idx) => (
                   <tr key={idx} className="text-center">
                     <td className="p-2 border">{d.refNo}</td>
+                    <td className="p-2 border">{d.marketplace ?? "-"}</td>
                     <td className="p-2 border">{d.skuAnchanto ?? "-"}</td>
+                    <td className="p-2 border">{d.itemName ?? "-"}</td>
                     <td className="p-2 border">{formatDate(d.dateAnchanto)}</td>
-                    {/* <td className="p-2 border">{d.qtyAnchanto?? "-"}</td> */}
+                    <td className="p-2 border">{d.qtyAnchanto?? "-"}</td>
+                    <td className="p-2 border">{d.senderSite ?? "-"}</td>
+                    <td className="p-2 border">{d.receiveSite ?? "-"}</td>
                     <td className="p-2 border">{d.skuCegid ?? "-"}</td>
+                    <td className="p-2 border">{d.itemNameCegid ?? "-"}</td>
                     <td className="p-2 border">{formatDate(d.dateCegid)}</td>
-                    {/* <td className="p-2 border">{d.qtyCegid?? "-"}</td> */}
+                    <td className="p-2 border">{d.qtyCegid?? "-"}</td>
+                    <td className="p-2 border">{d.unitCOGS ?? "-"}</td>
                     <td className={`p-2 border ${getStatusColor(d.status)}`}>{d.status}</td>
                   </tr>
                 ))}
