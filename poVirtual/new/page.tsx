@@ -5,6 +5,10 @@ import { use, useState } from "react";
 interface Detail {
   refNo: string;
 
+  senderSite: string | null;
+  receiveSite: string | null;
+  itemNameTransfer: string | null;
+  unitCOGS: number | null;
   skuTransfer: string | null;
   qtyTransfer: number | null;
   dateTransfer: string | null;
@@ -13,6 +17,10 @@ interface Detail {
   qtyConsignment: number | null;
   dateConsignment: string | null;
 
+  senderSiteReceived: string | null;
+  receiveSiteReceived: string | null;
+  itemNameReceived: string | null;
+  unitCOGSReceived: number | null;
   skuReceived: string | null;
   qtyReceived: number | null;
   dateReceived: string | null;
@@ -49,7 +57,7 @@ export default function Home() {
 
     try {
       setLoading(true);
-      const res = await fetch("http://localhost:5000/reconciliations/upload-3", {
+      const res = await fetch("http://localhost:5077/reconciliations/upload-3", {
         method: "POST",
         body: formData,
       });
@@ -108,7 +116,7 @@ export default function Home() {
         refNo.includes(keyword) ||
         sku1.includes(keyword) ||
         sku2.includes(keyword) ||
-        sku2.includes(keyword);
+        sku3.includes(keyword);
 
       const matchStatus = !filter || d.status === filter;
 
@@ -153,7 +161,7 @@ export default function Home() {
   if (startDate) params.append("startDate", startDate);
   if (endDate) params.append("endDate", endDate);
 
-  const url = `http://localhost:5000/reconciliationsPO/download/${result.reconciliationId}?${params.toString()}`;
+  const url = `http://localhost:5077/reconciliationsPO/download/${result.reconciliationId}?${params.toString()}`;
 
   const res = await fetch(url);
   const blob = await res.blob();
@@ -291,18 +299,22 @@ export default function Home() {
                 <tr className="bg-gray-300 text-center font-bold">
                   <th className="p-2 border" rowSpan={2}>Ref No</th>
 
-                  <th className="p-2 border bg-blue-200" colSpan={3}>TRANSFER NOTICE</th>
+                  <th className="p-2 border bg-blue-200" colSpan={7}>TRANSFER NOTICE</th>
                   <th className="p-2 border bg-yellow-200" colSpan={3}>CONSIGNMENT COMPLETE</th>
-                  <th className="p-2 border bg-green-200" colSpan={3}>RECEIVED TRANSFER</th>
+                  <th className="p-2 border bg-green-200" colSpan={7}>RECEIVED TRANSFER</th>
                   <th className="p-2 border" rowSpan={2}>Status</th>
                 </tr>
 
                 {/* 🔥 ROW 2: DETAIL HEADER */}
                 <tr className="bg-gray-100 text-center">
                   {/* Transfer */}
+                  <th className="p-2 border">Sender Site</th>
+                  <th className="p-2 border">Receive Site</th>
                   <th className="p-2 border">SKU Transfer</th>
+                  <th className="p-2 border">Item Name</th>
                   <th className="p-2 border">Date Transfer</th>
                   <th className="p-2 border">Stock Transfer</th>
+                  <th className="p-2 border">Unit COGS</th>
 
                   {/* Consignment */}
                   <th className="p-2 border">SKU Consignment</th>
@@ -310,24 +322,38 @@ export default function Home() {
                   <th className="p-2 border">Stock Consignment</th>
 
                   {/* Received */}
+                  <th className="p-2 border">Sender Site</th>
+                  <th className="p-2 border">Receive Site</th>
                   <th className="p-2 border">SKU Received</th>
+                  <th className="p-2 border">Item Name</th>
                   <th className="p-2 border">Date Received</th>
                   <th className="p-2 border">Stock Received</th>
+                  <th className="p-2 border">Unit COGS</th>
                 </tr>
               </thead>
               <tbody>
                 {currentData.map((d, idx) => (
                   <tr key={idx} className="text-center">
                     <td className="p-2 border">{d.refNo}</td>
+                    <td className="p-2 border">{d.senderSite ?? "-"}</td>
+                    <td className="p-2 border">{d.receiveSite ?? "-"}</td>
                     <td className="p-2 border">{d.skuTransfer ?? "-"}</td>
+                    <td className="p-2 border">{d.itemNameTransfer ?? "-"}</td>
                     <td className="p-2 border">{formatDate(d.dateTransfer)}</td>
                     <td className="p-2 border">{d.qtyTransfer?? "-"}</td>
+                    <td className="p-2 border">{d.unitCOGS ?? "-"}</td>
+
                     <td className="p-2 border">{d.skuConsignment ?? "-"}</td>
                     <td className="p-2 border">{formatDate(d.dateConsignment)}</td>
                     <td className="p-2 border">{d.qtyConsignment?? "-"}</td>
+
+                    <td className="p-2 border">{d.senderSiteReceived ?? "-"}</td>
+                    <td className="p-2 border">{d.receiveSiteReceived ?? "-"}</td>
                     <td className="p-2 border">{d.skuReceived ?? "-"}</td>
+                    <td className="p-2 border">{d.itemNameReceived ?? "-"}</td>
                     <td className="p-2 border">{formatDate(d.dateReceived)}</td>
                     <td className="p-2 border">{d.qtyReceived?? "-"}</td>
+                    <td className="p-2 border">{d.unitCOGSReceived?.toFixed(2) ?? "-"}</td>
                     <td className={`p-2 border ${getStatusColor(d.status)}`}>{d.status}</td>
                   </tr>
                 ))}
