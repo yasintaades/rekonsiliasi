@@ -18,44 +18,92 @@ public static class ReconB2BEndpoint
             IFormFile file2,
             IConfiguration config) =>
         {
+
+            Dictionary<string, int> GetHeaderMap(DataTable table)
+{
+    var dict = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+    var headerRow = table.Rows[0];
+
+    for (int i = 0; i < table.Columns.Count; i++)
+    {
+        var header = headerRow[i]?.ToString()?.Trim();
+
+        if (!string.IsNullOrEmpty(header) && !dict.ContainsKey(header))
+            dict.Add(header, i);
+    }
+
+    return dict;
+}
+
+string GetValue(DataRow row, Dictionary<string, int> map, params string[] possibleNames)
+{
+    foreach (var name in possibleNames)
+    {
+        if (map.TryGetValue(name, out int idx))
+            return row[idx]?.ToString();
+    }
+    return null;
+}
+
             // ========= PARSE =========
             List<Record2> ParseFile(IFormFile file)
-            {
-                var list = new List<Record2>();
+{
+    var list = new List<Record2>();
 
-                using var stream = file.OpenReadStream();
-                using var reader = ExcelReaderFactory.CreateReader(stream);
-                var result = reader.AsDataSet();
-                var table = result.Tables[0];
+    using var stream = file.OpenReadStream();
+    using var reader = ExcelReaderFactory.CreateReader(stream);
+    var result = reader.AsDataSet();
+    var table = result.Tables[0];
 
-                foreach (DataRow row in table.Rows.Cast<DataRow>().Skip(1))
-                {
-                    var refNo = row[0]?.ToString();
-                    if (string.IsNullOrWhiteSpace(refNo)) continue;
+    var map = GetHeaderMap(table);
 
-                    var sku = row[1]?.ToString();
+    foreach (DataRow row in table.Rows.Cast<DataRow>().Skip(1))
+    {
+        var refNo = GetValue(row, map,
+            "Order Number", "Internal ref", "RefNo");
 
+        if (string.IsNullOrWhiteSpace(refNo)) continue;
 
-                    DateTime? trxDate = null;
-                    if (DateTime.TryParse(row[2]?.ToString(), out var d))
-                        trxDate = d;
+        var senderSite = GetValue(row, map, "SENDER_SITE");
+        var receiveSite = GetValue(row, map, "RECEIVE_SITE");
 
-                    // ✅ NEW: qty
-                    int? qty = null;
-                    if (int.TryParse(row[3]?.ToString(), out var q))
-                        qty = q;
-        
-                    list.Add(new Record2
-                    {
-                        RefNo = refNo,
-                        Sku = sku ?? "",
-                        Qty = qty,
-                        TrxDate = trxDate
-                    });
-                }
+        var sku = GetValue(row, map,
+            "SKU", "Seller Sku", "Article","Amount");
 
-                return list;
-            }
+        var dateStr = GetValue(row, map, "Date",
+            "Order Date", "Gi_posting_date II");
+
+        DateTime? trxDate = null;
+        if (DateTime.TryParse(dateStr, out var d))
+            trxDate = d;
+
+        var qtyStr = GetValue(row, map,
+            "Ordered Quantity", "Gi_qty", "Qty","Stok");
+
+        int? qty = null;
+        if (int.TryParse(qtyStr, out var q))
+            qty = q;
+        var marketPlace = GetValue(row, map, "Marketplace");
+        var itemName = GetValue(row, map, "Item Name", "articledesc");
+        var unitCOGS = GetValue(row, map, "Gi_Unit_COGS");
+
+        list.Add(new Record2
+        {
+            RefNo = refNo.Trim(),
+            Sku = sku?.Trim() ?? "",
+            Qty = qty,
+            TrxDate = trxDate,
+            Marketplace = marketPlace?.Trim(),
+            ItemName = itemName?.Trim(),
+            SenderSite = senderSite?.Trim(),
+            ReceiveSite = receiveSite?.Trim(),
+            UnitCOGS = decimal.TryParse(unitCOGS, NumberStyles.Any, CultureInfo.InvariantCulture, out var cogs) ? cogs : (decimal?)null
+        });
+    }
+
+    return list;
+}
 
             var data1 = ParseFile(file1);
             var data2 = ParseFile(file2);
@@ -69,8 +117,8 @@ public static class ReconB2BEndpoint
 
             var details = new List<ReconciliationDetail2>();
 
-            var combined = data1.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "1", x.TrxDate })
-            .Concat(data2.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "2", x.TrxDate }));
+            var combined = data1.Select(x => new { x.RefNo, x.Marketplace, x.ItemName, x.Sku, x.Qty, Source = "1", x.TrxDate, x.SenderSite, x.ReceiveSite, x.UnitCOGS })
+            .Concat(data2.Select(x => new { x.RefNo, x.Marketplace, x.ItemName, x.Sku, x.Qty, Source = "2", x.TrxDate, x.SenderSite, x.ReceiveSite, x.UnitCOGS }));
 
             var grouped = combined
                 .GroupBy(x => new { x.RefNo, x.Sku });
@@ -97,9 +145,16 @@ public static class ReconB2BEndpoint
                             SkuAnchanto = d1?.Sku,
                             QtyAnchanto = d1?.Qty,
                             DateAnchanto = d1?.TrxDate,
+                            Marketplace = d1?.Marketplace,
+                            ItemName = d1?.ItemName,
+
+                            SenderSite = d2?.SenderSite,
+                            ReceiveSite = d2?.ReceiveSite,
                             SkuCegid = d2?.Sku,
                             QtyCegid = d2?.Qty,
                             DateCegid = d2?.TrxDate,
+                            ItemNameCegid = d2?.ItemName,
+                            UnitCOGS = d2?.UnitCOGS,
                             Status = status
                         });
                     }
@@ -135,25 +190,32 @@ public static class ReconB2BEndpoint
                 {
                     var cmd = new NpgsqlCommand(@"
                         INSERT INTO reconciliation_details_2
-                        (reconciliation_id, ref_no,
-                        sku_anchanto, date_anchanto, qty_anchanto,
-                        sku_cegid, date_cegid, qty_cegid,
+                        (reconciliation_id, ref_no, marketplace, item_name, 
+                        sku_anchanto, date_anchanto, qty_anchanto, sender_site, receive_site,
+                        sku_cegid, item_name_cegid, date_cegid, qty_cegid, unit_cogs,
                         status)
                         VALUES
                         (@rid, @ref,
-                        @sku1, @d1, @q1,
-                        @sku2, @d2, @q2,
+                        @mp, @in,
+                        @sku1, @d1, @q1, @sender_site, @receive_site,
+                        @sku2, @in2, @d2, @q2, @unit_cogs,
                         @s)", conn);
 
                     cmd.Parameters.AddWithValue("rid", reconciliationId);
                     cmd.Parameters.AddWithValue("ref", d.RefNo);
+                    cmd.Parameters.AddWithValue("mp", (object?)d.Marketplace ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("in", (object?)d.ItemName ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("sku1", (object?)d.SkuAnchanto ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("d1", (object?)d.DateAnchanto ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("q1", (object?)d.QtyAnchanto ?? DBNull.Value);
 
+                    cmd.Parameters.AddWithValue("sender_site", (object?)d.SenderSite ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("receive_site", (object?)d.ReceiveSite ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("sku2", (object?)d.SkuCegid ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("in2", (object?)d.ItemNameCegid ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("d2", (object?)d.DateCegid ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("q2", (object?)d.QtyCegid ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("unit_cogs", (object?)d.UnitCOGS ?? DBNull.Value);
 
                     cmd.Parameters.AddWithValue("s", d.Status);
 
@@ -191,9 +253,9 @@ public static class ReconB2BEndpoint
 
                 var sql = @"
                     SELECT 
-                        ref_no,
-                        sku_anchanto, date_anchanto, qty_anchanto,
-                        sku_cegid, date_cegid, qty_cegid,
+                        ref_no, marketplace, item_name, 
+                        sku_anchanto, date_anchanto, qty_anchanto, sender_site, receive_site,
+                        sku_cegid, item_name_cegid, date_cegid, qty_cegid, unit_cogs,
                         status
                     FROM reconciliation_details_2
                     WHERE reconciliation_id = @id
@@ -263,13 +325,19 @@ public static class ReconB2BEndpoint
                     {
                         RefNo = reader["ref_no"]?.ToString() ?? "",
 
+                        Marketplace = reader["marketplace"] == DBNull.Value ? null : (string?)reader["marketplace"],
                         SkuAnchanto = reader["sku_anchanto"] == DBNull.Value ? null : (string?)reader["sku_anchanto"],
-                        QtyAnchanto = reader["qty_anchanto"] == DBNull.Value ? null : (int?)reader["qty_anchanto"],
+                        ItemName = reader["item_name"] == DBNull.Value ? null : (string?)reader["item_name"],
                         DateAnchanto = reader["date_anchanto"] == DBNull.Value ? null : (DateTime?)reader["date_anchanto"],
+                        QtyAnchanto = reader["qty_anchanto"] == DBNull.Value ? null : (int?)reader["qty_anchanto"],
 
+                        SenderSite = reader["sender_site"] == DBNull.Value ? null : (string?)reader["sender_site"],
+                        ReceiveSite = reader["receive_site"] == DBNull.Value ? null : (string?)reader["receive_site"],
                         SkuCegid = reader["sku_cegid"] == DBNull.Value ? null : (string?)reader["sku_cegid"],
-                        QtyCegid = reader["qty_cegid"] == DBNull.Value ? null : (int?)reader["qty_cegid"],
+                        ItemNameCegid = reader["item_name_cegid"] == DBNull.Value ? null : (string?)reader["item_name_cegid"],
                         DateCegid = reader["date_cegid"] == DBNull.Value ? null : (DateTime?)reader["date_cegid"],
+                        QtyCegid = reader["qty_cegid"] == DBNull.Value ? null : (int?)reader["qty_cegid"],
+                        UnitCOGS = reader["unit_cogs"] == DBNull.Value ? null : (decimal?)reader["unit_cogs"],
 
                         Status = reader["status"]?.ToString() ?? ""
                     });
@@ -295,29 +363,36 @@ public static class ReconB2BEndpoint
             // ROW 1 (GROUP HEADER)
             // =====================
             
-            ws.Range(1, 2, 1, 4).Merge().Value = "ANCHANTO";
-            ws.Range(1, 5, 1, 7).Merge().Value = "CEGID";
+            ws.Range(1, 2, 1, 6).Merge().Value = "ANCHANTO";
+            ws.Range(1, 7, 1, 13).Merge().Value = "CEGID";
 
             // =====================
             // ROW 2 (DETAIL HEADER)
             // =====================
             ws.Cell(2, 1).Value = "Ref No";
 
-            ws.Cell(2, 2).Value = "SKU Anchanto";
-            ws.Cell(2, 3).Value = "Date Anchanto";
-            ws.Cell(2, 4).Value = "Stock Anchanto";
+            ws.Cell(2, 2).Value = "Marketplace";
+            ws.Cell(2, 3).Value = "SKU Anchanto";
+            ws.Cell(2, 4).Value = "Item Name";
+            ws.Cell(2, 5).Value = "Date Anchanto";
+            ws.Cell(2, 6).Value = "Stock Anchanto";
 
-            ws.Cell(2, 5).Value = "SKU Cegid";
-            ws.Cell(2, 6).Value = "Date Cegid";
-            ws.Cell(2, 7).Value = "Stock Cegid";
+            ws.Cell(2, 7).Value = "Sender Site";
+            ws.Cell(2, 8).Value = "Receive Site";
+            ws.Cell(2, 9).Value = "SKU Cegid";
+            ws.Cell(2, 10).Value = "Item Name Cegid";
+            ws.Cell(2, 11).Value = "Date Cegid";
+            ws.Cell(2, 12).Value = "Stock Cegid";
+            ws.Cell(2, 13).Value = "GI Unit COGS";
 
-            ws.Cell(2, 11).Value = "Status";
+
+            ws.Cell(2, 14).Value = "Status";
 
 
             // =====================
             // STYLE HEADER
             // =====================
-            var header = ws.Range(1, 1, 2, 11);
+            var header = ws.Range(1, 1, 2, 14);
             header.Style.Font.Bold = true;
             header.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
@@ -332,15 +407,20 @@ public static class ReconB2BEndpoint
 
                 ws.Cell(row, 1).Value = d.RefNo;
 
-                ws.Cell(row, 2).Value = d.SkuAnchanto;
-                ws.Cell(row, 3).Value = d.DateAnchanto;
-                ws.Cell(row, 4).Value = d.QtyAnchanto;
+                ws.Cell(row, 2).Value = d.Marketplace;
+                ws.Cell(row, 3).Value = d.SkuAnchanto;
+                ws.Cell(row, 4).Value = d.ItemName;
+                ws.Cell(row, 5).Value = d.DateAnchanto;
+                ws.Cell(row, 6).Value = d.QtyAnchanto;
 
-                ws.Cell(row, 5).Value = d.SkuCegid;
-                ws.Cell(row, 6).Value = d.DateCegid;
-                ws.Cell(row, 7).Value = d.QtyCegid;
-
-                ws.Cell(row, 11).Value = d.Status;
+                ws.Cell(row, 7).Value = d.SenderSite;
+                ws.Cell(row, 8).Value = d.ReceiveSite;
+                ws.Cell(row, 9).Value = d.SkuCegid;
+                ws.Cell(row, 10).Value = d.ItemNameCegid;
+                ws.Cell(row, 11).Value = d.DateCegid;
+                ws.Cell(row, 12).Value = d.QtyCegid;
+                ws.Cell(row, 13).Value = d.UnitCOGS;
+                ws.Cell(row, 14).Value = d.Status;
 
                 // 🔥 warna status (FIX)
                 var excelRow = ws.Row(row);
@@ -357,8 +437,8 @@ public static class ReconB2BEndpoint
             // =====================
             // BORDER + AUTO WIDTH
             // =====================
-            ws.Range(1, 1, list.Count + 2, 11).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-            ws.Range(1, 1, list.Count + 2, 11).Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+            ws.Range(1, 1, list.Count + 2, 14).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            ws.Range(1, 1, list.Count + 2, 14).Style.Border.InsideBorder = XLBorderStyleValues.Thin;
 
             ws.Columns().AdjustToContents();
 
@@ -386,13 +466,19 @@ public class ReconciliationDetail2
 {
     public string RefNo { get; set; } = "";
 
+    public string? Marketplace { get; set; }
+    public string? ItemName { get; set; }
     public string? SkuAnchanto { get; set; }
     public int? QtyAnchanto { get; set; }
     public DateTime? DateAnchanto { get; set; }
 
+    public string? SenderSite { get; set; }
+    public string? ReceiveSite { get; set; }
     public string? SkuCegid { get; set; }
+    public string? ItemNameCegid { get; set; }
     public int? QtyCegid { get; set; }
     public DateTime? DateCegid { get; set; }
+    public decimal? UnitCOGS { get; set; }
 
     public string Status { get; set; } = "";
 }
@@ -403,4 +489,9 @@ public class Record2
     public string Sku { get; set; } = "";
     public int? Qty { get; set; }
     public DateTime? TrxDate { get; set; }
+    public string? Marketplace { get; set; }
+    public string? ItemName { get; set; }
+    public string? SenderSite { get; set; }
+    public string? ReceiveSite { get; set; }
+    public decimal? UnitCOGS { get; set; }
 }
