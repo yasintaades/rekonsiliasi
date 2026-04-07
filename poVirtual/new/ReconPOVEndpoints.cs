@@ -20,6 +20,34 @@ public static class ReconPOVEndpoints
             IConfiguration config) =>
         {
             // ========= PARSE =========
+            Dictionary<string, int> GetHeaderMap(DataTable table)
+            {
+                var dict = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+                var headerRow = table.Rows[0];
+
+                for (int i = 0; i < table.Columns.Count; i++)
+                {
+                    var header = headerRow[i]?.ToString()?.Trim();
+
+                    if (!string.IsNullOrEmpty(header) && !dict.ContainsKey(header))
+                        dict.Add(header, i);
+                }
+
+                return dict;
+            }
+
+            string GetValue(DataRow row, Dictionary<string, int> map, params string[] possibleNames)
+            {
+                foreach (var name in possibleNames)
+                {
+                    if (map.TryGetValue(name, out int idx))
+                        return row[idx]?.ToString();
+                }
+                return null;
+            }
+
+            // ========= PARSE =========
             List<Record> ParseFile(IFormFile file)
             {
                 var list = new List<Record>();
@@ -29,29 +57,47 @@ public static class ReconPOVEndpoints
                 var result = reader.AsDataSet();
                 var table = result.Tables[0];
 
+                var map = GetHeaderMap(table);
+
                 foreach (DataRow row in table.Rows.Cast<DataRow>().Skip(1))
                 {
-                    var refNo = row[0]?.ToString();
+                    var refNo = GetValue(row, map,
+                        "Order Number", "Internal ref", "internalReference");
+
                     if (string.IsNullOrWhiteSpace(refNo)) continue;
 
-                    var sku = row[1]?.ToString();
+                    var senderSite = GetValue(row, map, "SENDER_SITE");
+                    var receiveSite = GetValue(row, map, "RECEIVE_SITE");
 
+                    var sku = GetValue(row, map,
+                        "SKU", "Seller Sku", "Article","Amount");
+
+                    var dateStr = GetValue(row, map, "Date",
+                        "Order Date", "Gi_posting_date");
 
                     DateTime? trxDate = null;
-                    if (DateTime.TryParse(row[2]?.ToString(), out var d))
+                    if (DateTime.TryParse(dateStr, out var d))
                         trxDate = d;
 
-                    // ✅ NEW: qty
+                    var qtyStr = GetValue(row, map,
+                        "Ordered Quantity", "Gi_qty", "Qty","Stok");
+
                     int? qty = null;
-                    if (int.TryParse(row[3]?.ToString(), out var q))
+                    if (int.TryParse(qtyStr, out var q))
                         qty = q;
-        
+                    var itemName = GetValue(row, map, "Item Name", "articledesc");
+                    var unitCOGS = GetValue(row, map, "Gi_Unit_COGS");
+
                     list.Add(new Record
                     {
-                        RefNo = refNo,
-                        Sku = sku ?? "",
+                        RefNo = refNo.Trim(),
+                        Sku = sku?.Trim() ?? "",
                         Qty = qty,
-                        TrxDate = trxDate
+                        TrxDate = trxDate,
+                        ItemName = itemName?.Trim(),
+                        SenderSite = senderSite?.Trim(),
+                        ReceiveSite = receiveSite?.Trim(),
+                        UnitCOGS = decimal.TryParse(unitCOGS, NumberStyles.Any, CultureInfo.InvariantCulture, out var cogs) ? cogs : (decimal?)null
                     });
                 }
 
@@ -73,9 +119,9 @@ public static class ReconPOVEndpoints
 
             var details = new List<ReconciliationDetail3>();
 
-            var combined = data1.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "1", x.TrxDate })
-            .Concat(data2.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "2", x.TrxDate }))
-            .Concat(data3.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "3", x.TrxDate }));
+            var combined = data1.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "1", x.TrxDate, x.ItemName, x.SenderSite, x.ReceiveSite, x.UnitCOGS })
+            .Concat(data2.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "2", x.TrxDate, x.ItemName, x.SenderSite, x.ReceiveSite, x.UnitCOGS }))
+            .Concat(data3.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "3", x.TrxDate, x.ItemName, x.SenderSite, x.ReceiveSite, x.UnitCOGS }));
 
             var grouped = combined
                 .GroupBy(x => new { x.RefNo, x.Sku });
@@ -95,15 +141,25 @@ public static class ReconPOVEndpoints
                         details.Add(new ReconciliationDetail3
                         {
                             RefNo = g.Key.RefNo,
+                            SenderSite = d1?.SenderSite,
+                            ReceiveSite = d1?.ReceiveSite,
                             SkuTransfer = d1?.Sku,
-                            QtyTransfer = d1?.Qty,
+                            ItemNameTransfer = d1?.ItemName,
                             DateTransfer = d1?.TrxDate,
+                            QtyTransfer = d1?.Qty,
+                            UnitCOGS = d1?.UnitCOGS,
+
                             SkuConsignment = d2?.Sku,
                             QtyConsignment = d2?.Qty,
                             DateConsignment = d2?.TrxDate,
+
+                            SenderSiteReceived = d3?.SenderSite,
+                            ReceiveSiteReceived = d3?.ReceiveSite,
                             SkuReceived = d3?.Sku,
-                            QtyReceived = d3?.Qty,
+                            ItemNameReceived = d3?.ItemName,
                             DateReceived = d3?.TrxDate,
+                            QtyReceived = d3?.Qty,
+                            UnitCOGSReceived = d3?.UnitCOGS,
                             Status = status
                         });
                     }
@@ -139,31 +195,43 @@ public static class ReconPOVEndpoints
                 {
                     var cmd = new NpgsqlCommand(@"
                         INSERT INTO reconciliation_details_3
-                        (reconciliation_id, ref_no,
-                        sku_transfer_notice, date_transfer_notice, qty_transfer_notice,
+                        (reconciliation_id, ref_no, sender_site, receive_site,
+                        item_name_transfer, unit_cogs, sku_transfer_notice, date_transfer_notice, qty_transfer_notice,
                         sku_consignment, date_consignment, qty_consignment,
-                        sku_received, date_received, qty_received,
+
+                        sender_site_received, receive_site_received, 
+                        item_name_received, sku_received, date_received, qty_received, unit_cogs_received,
                         status)
                         VALUES
-                        (@rid, @ref,
+                        (@rid, @ref, @sender_site, @receive_site,
+                         @item_name_transfer, @unit_cogs,
                         @sku1, @d1, @q1,
                         @sku2, @d2, @q2,
-                        @sku3, @d3, @q3,
+                        @sku3, @d3, @q3, @unit_cogs_received, @sender_site_received, @receive_site_received,
+                        @item_name_received,
                         @s)", conn);
 
                     cmd.Parameters.AddWithValue("rid", reconciliationId);
                     cmd.Parameters.AddWithValue("ref", d.RefNo);
+                    cmd.Parameters.AddWithValue("sender_site", (object?)d.SenderSite ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("receive_site", (object?)d.ReceiveSite ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("sku1", (object?)d.SkuTransfer ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("item_name_transfer", (object?)d.ItemNameTransfer ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("d1", (object?)d.DateTransfer ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("q1", (object?)d.QtyTransfer ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("unit_cogs", (object?)d.UnitCOGS ?? DBNull.Value);
 
                     cmd.Parameters.AddWithValue("sku2", (object?)d.SkuConsignment ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("d2", (object?)d.DateConsignment ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("q2", (object?)d.QtyConsignment ?? DBNull.Value);
 
+                    cmd.Parameters.AddWithValue("sender_site_received", (object?)d.SenderSiteReceived ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("receive_site_received", (object?)d.ReceiveSiteReceived ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("sku3", (object?)d.SkuReceived ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("item_name_received", (object?)d.ItemNameReceived ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("d3", (object?)d.DateReceived ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("q3", (object?)d.QtyReceived ?? DBNull.Value);
+                    cmd.Parameters.AddWithValue("unit_cogs_received", (object?)d.UnitCOGSReceived ?? DBNull.Value);
 
                     cmd.Parameters.AddWithValue("s", d.Status);
 
@@ -201,10 +269,12 @@ public static class ReconPOVEndpoints
 
                 var sql = @"
                     SELECT 
-                        ref_no,
+                        ref_no, sender_site, receive_site,
+                        item_name_transfer, unit_cogs,
                         sku_transfer_notice, date_transfer_notice, qty_transfer_notice,
                         sku_consignment, date_consignment, qty_consignment,
-                        sku_received, date_received, qty_received,
+                        sender_site_received, receive_site_received, sku_received, 
+                        item_name_received, date_received, qty_received, unit_cogs_received,
                         status
                     FROM reconciliation_details_3
                     WHERE reconciliation_id = @id
@@ -275,17 +345,25 @@ public static class ReconPOVEndpoints
                     {
                         RefNo = reader["ref_no"]?.ToString() ?? "",
 
+                        SenderSite = reader["sender_site"]?.ToString(),
+                        ReceiveSite = reader["receive_site"]?.ToString(),
                         SkuTransfer = reader["sku_transfer_notice"] == DBNull.Value ? null : (string?)reader["sku_transfer_notice"],
-                        QtyTransfer = reader["qty_transfer_notice"] == DBNull.Value ? null : (int?)reader["qty_transfer_notice"],
+                        ItemNameTransfer = reader["item_name_transfer"] == DBNull.Value ? null : (string?)reader["item_name_transfer"],
                         DateTransfer = reader["date_transfer_notice"] == DBNull.Value ? null : (DateTime?)reader["date_transfer_notice"],
+                        QtyTransfer = reader["qty_transfer_notice"] == DBNull.Value ? null : (int?)reader["qty_transfer_notice"],
+                        UnitCOGS = reader["unit_cogs"] == DBNull.Value ? null : (decimal?)reader["unit_cogs"],
 
                         SkuConsignment = reader["sku_consignment"] == DBNull.Value ? null : (string?)reader["sku_consignment"],
                         QtyConsignment = reader["qty_consignment"] == DBNull.Value ? null : (int?)reader["qty_consignment"],
                         DateConsignment = reader["date_consignment"] == DBNull.Value ? null : (DateTime?)reader["date_consignment"],
 
+                        SenderSiteReceived = reader["sender_site_received"]?.ToString(),
+                        ReceiveSiteReceived = reader["receive_site_received"]?.ToString(),
                         SkuReceived = reader["sku_received"] == DBNull.Value ? null : (string?)reader["sku_received"],
-                        QtyReceived = reader["qty_received"] == DBNull.Value ? null : (int?)reader["qty_received"],
+                        ItemNameReceived = reader["item_name_received"] == DBNull.Value ? null : (string?)reader["item_name_received"],
                         DateReceived = reader["date_received"] == DBNull.Value ? null : (DateTime?)reader["date_received"],
+                        QtyReceived = reader["qty_received"] == DBNull.Value ? null : (int?)reader["qty_received"],
+                        UnitCOGSReceived = reader["unit_cogs_received"] == DBNull.Value ? null : (decimal?)reader["unit_cogs_received"],
 
                         Status = reader["status"]?.ToString() ?? ""
                     });
@@ -411,19 +489,29 @@ public class ReconciliationDetail3
 {
     public string RefNo { get; set; } = "";
 
+    public string? SenderSite { get; set; }
+    public string? ReceiveSite { get; set; }
     public string? SkuTransfer { get; set; }
     public int? QtyTransfer { get; set; }
     public DateTime? DateTransfer { get; set; }
+    public decimal? UnitCOGS { get; set; }
+
+    public string? ItemNameTransfer { get; set; }
 
     public string? SkuConsignment { get; set; }
     public int? QtyConsignment { get; set; }
     public DateTime? DateConsignment { get; set; }
 
+    public string? SenderSiteReceived { get; set; }
+    public string? ReceiveSiteReceived { get; set; }
+     public string? ItemNameReceived { get; set; }
+     public decimal? UnitCOGSReceived { get; set; }
     public string? SkuReceived { get; set; }
     public int? QtyReceived { get; set; }
     public DateTime? DateReceived { get; set; }
 
     public string Status { get; set; } = "";
+    public object SkuAnchanto { get; internal set; }
 }
 
 public class Record
@@ -432,4 +520,8 @@ public class Record
     public string Sku { get; set; } = "";
     public int? Qty { get; set; }
     public DateTime? TrxDate { get; set; }
+    public string? ItemName { get; set; }
+    public string? SenderSite { get; set; }     
+    public string? ReceiveSite { get; set; }
+    public decimal? UnitCOGS { get; set; }
 }
