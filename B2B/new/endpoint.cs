@@ -20,90 +20,90 @@ public static class ReconB2BEndpoint
         {
 
             Dictionary<string, int> GetHeaderMap(DataTable table)
-{
-    var dict = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            {
+                var dict = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-    var headerRow = table.Rows[0];
+                var headerRow = table.Rows[0];
 
-    for (int i = 0; i < table.Columns.Count; i++)
-    {
-        var header = headerRow[i]?.ToString()?.Trim();
+                for (int i = 0; i < table.Columns.Count; i++)
+                {
+                    var header = headerRow[i]?.ToString()?.Trim();
 
-        if (!string.IsNullOrEmpty(header) && !dict.ContainsKey(header))
-            dict.Add(header, i);
-    }
+                    if (!string.IsNullOrEmpty(header) && !dict.ContainsKey(header))
+                        dict.Add(header, i);
+                }
 
-    return dict;
-}
+                return dict;
+            }
 
-string GetValue(DataRow row, Dictionary<string, int> map, params string[] possibleNames)
-{
-    foreach (var name in possibleNames)
-    {
-        if (map.TryGetValue(name, out int idx))
-            return row[idx]?.ToString();
-    }
-    return null;
-}
+            string GetValue(DataRow row, Dictionary<string, int> map, params string[] possibleNames)
+            {
+                foreach (var name in possibleNames)
+                {
+                    if (map.TryGetValue(name, out int idx))
+                        return row[idx]?.ToString();
+                }
+                return null;
+            }
 
             // ========= PARSE =========
             List<Record2> ParseFile(IFormFile file)
-{
-    var list = new List<Record2>();
+            {
+                var list = new List<Record2>();
 
-    using var stream = file.OpenReadStream();
-    using var reader = ExcelReaderFactory.CreateReader(stream);
-    var result = reader.AsDataSet();
-    var table = result.Tables[0];
+                using var stream = file.OpenReadStream();
+                using var reader = ExcelReaderFactory.CreateReader(stream);
+                var result = reader.AsDataSet();
+                var table = result.Tables[0];
 
-    var map = GetHeaderMap(table);
+                var map = GetHeaderMap(table);
 
-    foreach (DataRow row in table.Rows.Cast<DataRow>().Skip(1))
-    {
-        var refNo = GetValue(row, map,
-            "Order Number", "Internal ref", "RefNo");
+                foreach (DataRow row in table.Rows.Cast<DataRow>().Skip(1))
+                {
+                    var refNo = GetValue(row, map,
+                        "Order Number", "Internal ref", "RefNo");
 
-        if (string.IsNullOrWhiteSpace(refNo)) continue;
+                    if (string.IsNullOrWhiteSpace(refNo)) continue;
 
-        var senderSite = GetValue(row, map, "SENDER_SITE");
-        var receiveSite = GetValue(row, map, "RECEIVE_SITE");
+                    var senderSite = GetValue(row, map, "SENDER_SITE");
+                    var receiveSite = GetValue(row, map, "RECEIVE_SITE");
 
-        var sku = GetValue(row, map,
-            "SKU", "Seller Sku", "Article","Amount");
+                    var sku = GetValue(row, map,
+                        "SKU", "Seller Sku", "Article","Amount");
 
-        var dateStr = GetValue(row, map, "Date",
-            "Order Date", "Gi_posting_date II");
+                    var dateStr = GetValue(row, map, "Date",
+                        "Order Date", "Gi_posting_date II");
 
-        DateTime? trxDate = null;
-        if (DateTime.TryParse(dateStr, out var d))
-            trxDate = d;
+                    DateTime? trxDate = null;
+                    if (DateTime.TryParse(dateStr, out var d))
+                        trxDate = d;
 
-        var qtyStr = GetValue(row, map,
-            "Ordered Quantity", "Gi_qty", "Qty","Stok");
+                    var qtyStr = GetValue(row, map,
+                        "Ordered Quantity", "Gi_qty", "Qty","Stok");
 
-        int? qty = null;
-        if (int.TryParse(qtyStr, out var q))
-            qty = q;
-        var marketPlace = GetValue(row, map, "Marketplace");
-        var itemName = GetValue(row, map, "Item Name", "articledesc");
-        var unitCOGS = GetValue(row, map, "Gi_Unit_COGS");
+                    int? qty = null;
+                    if (int.TryParse(qtyStr, out var q))
+                        qty = q;
+                    var marketPlace = GetValue(row, map, "Marketplace");
+                    var itemName = GetValue(row, map, "Item Name", "articledesc");
+                    var unitCOGS = GetValue(row, map, "Gi_Unit_COGS");
 
-        list.Add(new Record2
-        {
-            RefNo = refNo.Trim(),
-            Sku = sku?.Trim() ?? "",
-            Qty = qty,
-            TrxDate = trxDate,
-            Marketplace = marketPlace?.Trim(),
-            ItemName = itemName?.Trim(),
-            SenderSite = senderSite?.Trim(),
-            ReceiveSite = receiveSite?.Trim(),
-            UnitCOGS = decimal.TryParse(unitCOGS, NumberStyles.Any, CultureInfo.InvariantCulture, out var cogs) ? cogs : (decimal?)null
-        });
-    }
+                    list.Add(new Record2
+                    {
+                        RefNo = refNo.Trim(),
+                        Sku = sku?.Trim() ?? "",
+                        Qty = qty,
+                        TrxDate = trxDate,
+                        Marketplace = marketPlace?.Trim(),
+                        ItemName = itemName?.Trim(),
+                        SenderSite = senderSite?.Trim(),
+                        ReceiveSite = receiveSite?.Trim(),
+                        UnitCOGS = decimal.TryParse(unitCOGS, NumberStyles.Any, CultureInfo.InvariantCulture, out var cogs) ? cogs : (decimal?)null
+                    });
+                }
 
-    return list;
-}
+                return list;
+            }
 
             var data1 = ParseFile(file1);
             var data2 = ParseFile(file2);
@@ -253,8 +253,9 @@ string GetValue(DataRow row, Dictionary<string, int> map, params string[] possib
 
                 var sql = @"
                     SELECT 
-                        ref_no, marketplace, item_name, 
-                        sku_anchanto, date_anchanto, qty_anchanto, sender_site, receive_site,
+                        ref_no, marketplace, 
+                        sku_anchanto, item_name, date_anchanto, qty_anchanto, 
+                        sender_site, receive_site,
                         sku_cegid, item_name_cegid, date_cegid, qty_cegid, unit_cogs,
                         status
                     FROM reconciliation_details_2
