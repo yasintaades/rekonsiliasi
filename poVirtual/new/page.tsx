@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
+import Sidebar from "../../components/layouts/Sidebar";
 
 interface Detail {
   refNo: string;
@@ -13,6 +14,7 @@ interface Detail {
   qtyTransfer: number | null;
   dateTransfer: string | null;
 
+  consignmentNo: string | null;
   skuConsignment: string | null;
   qtyConsignment: number | null;
   dateConsignment: string | null;
@@ -176,9 +178,9 @@ export default function Home() {
   // 🔹 JSX
   // ========================
   return (
-    <main className="flex justify-center items-start p-6">
-      {/* <Sidebar/> */}
-      <div className="w-full max-w-6xl">
+    <main className="flex items-start p-6 pl-30 pr-10">
+      <Sidebar/>
+      <div className="w-full max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold text-center mb-8">Reconciliation PO VIRTUAL</h1>
 
         {/* Upload */}
@@ -300,7 +302,7 @@ export default function Home() {
                   <th className="p-2 border" rowSpan={2}>Ref No</th>
 
                   <th className="p-2 border bg-blue-200" colSpan={7}>TRANSFER NOTICE</th>
-                  <th className="p-2 border bg-yellow-200" colSpan={3}>CONSIGNMENT COMPLETE</th>
+                  <th className="p-2 border bg-yellow-200" colSpan={4}>CONSIGNMENT COMPLETE</th>
                   <th className="p-2 border bg-green-200" colSpan={7}>RECEIVED TRANSFER</th>
                   <th className="p-2 border" rowSpan={2}>Status</th>
                 </tr>
@@ -317,6 +319,7 @@ export default function Home() {
                   <th className="p-2 border">Unit COGS</th>
 
                   {/* Consignment */}
+                  <th className="p-2 border">Consignment Number</th>
                   <th className="p-2 border">SKU Consignment</th>
                   <th className="p-2 border">Date Consignment</th>
                   <th className="p-2 border">Stock Consignment</th>
@@ -343,6 +346,7 @@ export default function Home() {
                     <td className="p-2 border">{d.qtyTransfer?? "-"}</td>
                     <td className="p-2 border">{d.unitCOGS ?? "-"}</td>
 
+                    <td className="p-2 border">{d.consignmentNo?? "-"}</td>
                     <td className="p-2 border">{d.skuConsignment ?? "-"}</td>
                     <td className="p-2 border">{formatDate(d.dateConsignment)}</td>
                     <td className="p-2 border">{d.qtyConsignment?? "-"}</td>
@@ -359,6 +363,7 @@ export default function Home() {
                 ))}
               </tbody>
             </table>
+            </div>)}
 
             {/* Pagination */}
             <div className="flex justify-between items-center mt-4 px-2">
@@ -378,8 +383,7 @@ export default function Home() {
                 Next
               </button>
             </div>
-          </div>
-        )}
+        
       </div>
     </main>
   );
