@@ -6,6 +6,7 @@ using Npgsql;
 using System.Data;
 using System.Globalization;
 using ClosedXML.Excel;
+using System.Linq;
 
 public static class ReconPOVEndpoints
 {
@@ -62,30 +63,33 @@ public static class ReconPOVEndpoints
                 foreach (DataRow row in table.Rows.Cast<DataRow>().Skip(1))
                 {
                     var refNo = GetValue(row, map,
-                        "Order Number", "Internal ref", "internalReference");
+                        "Order Number", "Internal ref", "internalReference", "Reference Number");
 
                     if (string.IsNullOrWhiteSpace(refNo)) continue;
 
                     var senderSite = GetValue(row, map, "SENDER_SITE");
                     var receiveSite = GetValue(row, map, "RECEIVE_SITE");
 
+                    var consignmentNo = GetValue(row, map, "Consignment Number");
+
                     var sku = GetValue(row, map,
-                        "SKU", "Seller Sku", "Article","Amount");
+                        "SKU", "Seller Sku", "Article","Product Sku");
 
                     var dateStr = GetValue(row, map, "Date",
-                        "Order Date", "Gi_posting_date");
+                        "Order Date", "Gi_posting_date", "Completed Date");
 
                     DateTime? trxDate = null;
                     if (DateTime.TryParse(dateStr, out var d))
                         trxDate = d;
 
                     var qtyStr = GetValue(row, map,
-                        "Ordered Quantity", "Gi_qty", "Qty","Stok");
+                        "Ordered Quantity", "Gi_qty", "Qty","Stok", "Consignment Quantity");
 
                     int? qty = null;
                     if (int.TryParse(qtyStr, out var q))
                         qty = q;
-                    var itemName = GetValue(row, map, "Item Name", "articledesc");
+
+                    var itemName = GetValue(row, map, "Item Name", "articledesc","Product Name");
                     var unitCOGS = GetValue(row, map, "Gi_Unit_COGS");
 
                     list.Add(new Record
@@ -97,6 +101,7 @@ public static class ReconPOVEndpoints
                         ItemName = itemName?.Trim(),
                         SenderSite = senderSite?.Trim(),
                         ReceiveSite = receiveSite?.Trim(),
+                        ConsignmentNo = consignmentNo?.Trim(),
                         UnitCOGS = decimal.TryParse(unitCOGS, NumberStyles.Any, CultureInfo.InvariantCulture, out var cogs) ? cogs : (decimal?)null
                     });
                 }
@@ -119,9 +124,9 @@ public static class ReconPOVEndpoints
 
             var details = new List<ReconciliationDetail3>();
 
-            var combined = data1.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "1", x.TrxDate, x.ItemName, x.SenderSite, x.ReceiveSite, x.UnitCOGS })
-            .Concat(data2.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "2", x.TrxDate, x.ItemName, x.SenderSite, x.ReceiveSite, x.UnitCOGS }))
-            .Concat(data3.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "3", x.TrxDate, x.ItemName, x.SenderSite, x.ReceiveSite, x.UnitCOGS }));
+            var combined = data1.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "1", x.TrxDate, x.ItemName, x.SenderSite, x.ReceiveSite, x.UnitCOGS, x.ConsignmentNo })
+            .Concat(data2.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "2", x.TrxDate, x.ItemName, x.SenderSite, x.ReceiveSite, x.UnitCOGS, x.ConsignmentNo }))
+            .Concat(data3.Select(x => new { x.RefNo, x.Sku, x.Qty, Source = "3", x.TrxDate, x.ItemName, x.SenderSite, x.ReceiveSite, x.UnitCOGS, x.ConsignmentNo }));
 
             var grouped = combined
                 .GroupBy(x => new { x.RefNo, x.Sku });
@@ -149,9 +154,10 @@ public static class ReconPOVEndpoints
                             QtyTransfer = d1?.Qty,
                             UnitCOGS = d1?.UnitCOGS,
 
+                            ConsignmentNo = d2?.ConsignmentNo,
                             SkuConsignment = d2?.Sku,
-                            QtyConsignment = d2?.Qty,
                             DateConsignment = d2?.TrxDate,
+                            QtyConsignment = d2?.Qty,
 
                             SenderSiteReceived = d3?.SenderSite,
                             ReceiveSiteReceived = d3?.ReceiveSite,
@@ -197,7 +203,8 @@ public static class ReconPOVEndpoints
                         INSERT INTO reconciliation_details_3
                         (reconciliation_id, ref_no, sender_site, receive_site,
                         item_name_transfer, unit_cogs, sku_transfer_notice, date_transfer_notice, qty_transfer_notice,
-                        sku_consignment, date_consignment, qty_consignment,
+
+                        consignment_no, sku_consignment, date_consignment, qty_consignment,
 
                         sender_site_received, receive_site_received, 
                         item_name_received, sku_received, date_received, qty_received, unit_cogs_received,
@@ -206,9 +213,10 @@ public static class ReconPOVEndpoints
                         (@rid, @ref, @sender_site, @receive_site,
                          @item_name_transfer, @unit_cogs,
                         @sku1, @d1, @q1,
-                        @sku2, @d2, @q2,
-                        @sku3, @d3, @q3, @unit_cogs_received, @sender_site_received, @receive_site_received,
-                        @item_name_received,
+
+                        @consignment_no, @sku2, @d2, @q2,
+                        @sender_site_received, @receive_site_received,
+                        @item_name_received, @sku3, @d3, @q3, @unit_cogs_received,
                         @s)", conn);
 
                     cmd.Parameters.AddWithValue("rid", reconciliationId);
@@ -221,6 +229,8 @@ public static class ReconPOVEndpoints
                     cmd.Parameters.AddWithValue("q1", (object?)d.QtyTransfer ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("unit_cogs", (object?)d.UnitCOGS ?? DBNull.Value);
 
+                    
+                    cmd.Parameters.AddWithValue("consignment_no", (object?)d.ConsignmentNo ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("sku2", (object?)d.SkuConsignment ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("d2", (object?)d.DateConsignment ?? DBNull.Value);
                     cmd.Parameters.AddWithValue("q2", (object?)d.QtyConsignment ?? DBNull.Value);
@@ -269,10 +279,9 @@ public static class ReconPOVEndpoints
 
                 var sql = @"
                     SELECT 
-                        ref_no, sender_site, receive_site,
-                        item_name_transfer, unit_cogs,
-                        sku_transfer_notice, date_transfer_notice, qty_transfer_notice,
-                        sku_consignment, date_consignment, qty_consignment,
+                        ref_no, sender_site, receive_site, sku_transfer_notice,
+                        item_name_transfer, date_transfer_notice, qty_transfer_notice, unit_cogs,
+                        consignment_no, sku_consignment, date_consignment, qty_consignment,
                         sender_site_received, receive_site_received, sku_received, 
                         item_name_received, date_received, qty_received, unit_cogs_received,
                         status
@@ -353,9 +362,10 @@ public static class ReconPOVEndpoints
                         QtyTransfer = reader["qty_transfer_notice"] == DBNull.Value ? null : (int?)reader["qty_transfer_notice"],
                         UnitCOGS = reader["unit_cogs"] == DBNull.Value ? null : (decimal?)reader["unit_cogs"],
 
+                        ConsignmentNo = reader["consignment_no"] == DBNull.Value? null : (string?) reader ["consignment_no"],
                         SkuConsignment = reader["sku_consignment"] == DBNull.Value ? null : (string?)reader["sku_consignment"],
-                        QtyConsignment = reader["qty_consignment"] == DBNull.Value ? null : (int?)reader["qty_consignment"],
                         DateConsignment = reader["date_consignment"] == DBNull.Value ? null : (DateTime?)reader["date_consignment"],
+                        QtyConsignment = reader["qty_consignment"] == DBNull.Value ? null : (int?)reader["qty_consignment"],
 
                         SenderSiteReceived = reader["sender_site_received"]?.ToString(),
                         ReceiveSiteReceived = reader["receive_site_received"]?.ToString(),
@@ -389,34 +399,43 @@ public static class ReconPOVEndpoints
             // ROW 1 (GROUP HEADER)
             // =====================
             
-            ws.Range(1, 2, 1, 4).Merge().Value = "TRANSFER NOTICE";
-            ws.Range(1, 5, 1, 7).Merge().Value = "CONSIGNMENT COMPLETE";
-            ws.Range(1, 8, 1, 10).Merge().Value = "RECEIVED TRANSFER";
+            ws.Range(1, 2, 1, 8).Merge().Value = "TRANSFER NOTICE";
+            ws.Range(1, 9, 1, 12).Merge().Value = "CONSIGNMENT COMPLETE";
+            ws.Range(1, 13, 1, 19).Merge().Value = "RECEIVED TRANSFER";
 
             // =====================
             // ROW 2 (DETAIL HEADER)
             // =====================
             ws.Cell(2, 1).Value = "Ref No";
 
-            ws.Cell(2, 2).Value = "SKU Transfer";
-            ws.Cell(2, 3).Value = "Date Transfer";
-            ws.Cell(2, 4).Value = "Stock Transfer";
+            ws.Cell(2, 2).Value = "Sender Site";
+            ws.Cell(2, 3).Value = "Receive Site";
+            ws.Cell(2, 4).Value = "SKU Transfer";
+            ws.Cell(2, 5).Value = "Item Name";
+            ws.Cell(2, 6).Value = "Date Transfer";
+            ws.Cell(2, 7).Value = "Stok Transfer";
+            ws.Cell(2, 8).Value = "Unit COGS";
 
-            ws.Cell(2, 5).Value = "SKU Consignment";
-            ws.Cell(2, 6).Value = "Date Consignment";
-            ws.Cell(2, 7).Value = "Stock Consignment";
+            ws.Cell(2, 9).Value = "Consignment Number";
+            ws.Cell(2, 10).Value = "SKU Consignment";
+            ws.Cell(2, 11).Value = "Date Consignment";
+            ws.Cell(2, 12).Value = "Stock Consignment";
 
-            ws.Cell(2, 8).Value = "SKU Received";
-            ws.Cell(2, 9).Value = "Date Received";
-            ws.Cell(2, 10).Value = "Stock Received";
+            ws.Cell(2, 13).Value = "Sender Site";
+            ws.Cell(2, 14).Value = "Receive Site";
+            ws.Cell(2, 15).Value = "SKU Received";
+            ws.Cell(2, 16).Value = "Item Name";
+            ws.Cell(2, 17).Value = "Date Received";
+            ws.Cell(2, 18).Value = "Stock Received";
+            ws.Cell(2, 19).Value = "Unit COGS";
 
-            ws.Cell(2, 11).Value = "Status";
+            ws.Cell(2, 20).Value = "Status";
 
 
             // =====================
             // STYLE HEADER
             // =====================
-            var header = ws.Range(1, 1, 2, 11);
+            var header = ws.Range(1, 1, 2, 20);
             header.Style.Font.Bold = true;
             header.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
 
@@ -431,19 +450,28 @@ public static class ReconPOVEndpoints
 
                 ws.Cell(row, 1).Value = d.RefNo;
 
-                ws.Cell(row, 2).Value = d.SkuTransfer;
-                ws.Cell(row, 3).Value = d.DateTransfer;
-                ws.Cell(row, 4).Value = d.QtyTransfer;
+                ws.Cell(row, 2).Value = d.SenderSite;
+                ws.Cell(row, 3).Value = d.ReceiveSite;
+                ws.Cell(row, 4).Value = d.SkuTransfer;
+                ws.Cell(row, 5).Value = d.ItemNameTransfer;
+                ws.Cell(row, 6).Value = d.DateTransfer;
+                ws.Cell(row, 7).Value = d.QtyTransfer;
+                ws.Cell(row, 8).Value = d.UnitCOGS;
 
-                ws.Cell(row, 5).Value = d.SkuConsignment;
-                ws.Cell(row, 6).Value = d.DateConsignment;
-                ws.Cell(row, 7).Value = d.QtyConsignment;
+                ws.Cell(row, 9).Value = d.ConsignmentNo;
+                ws.Cell(row, 10).Value = d.SkuConsignment;
+                ws.Cell(row, 11).Value = d.DateConsignment;
+                ws.Cell(row, 12).Value = d.QtyConsignment;
 
-                ws.Cell(row, 8).Value = d.SkuReceived;
-                ws.Cell(row, 9).Value = d.DateReceived;
-                ws.Cell(row, 10).Value = d.QtyReceived;
+                ws.Cell(row, 13).Value = d.SenderSiteReceived;
+                ws.Cell(row, 14).Value = d.ReceiveSiteReceived;
+                ws.Cell(row, 15).Value = d.SkuReceived;
+                ws.Cell(row, 16).Value = d.ItemNameReceived;
+                ws.Cell(row, 17).Value = d.DateReceived;
+                ws.Cell(row, 18).Value = d.QtyReceived;
+                ws.Cell(row, 19).Value = d.UnitCOGSReceived;
 
-                ws.Cell(row, 11).Value = d.Status;
+                ws.Cell(row, 20).Value = d.Status;
 
                 // 🔥 warna status (FIX)
                 var excelRow = ws.Row(row);
@@ -460,8 +488,8 @@ public static class ReconPOVEndpoints
             // =====================
             // BORDER + AUTO WIDTH
             // =====================
-            ws.Range(1, 1, list.Count + 2, 11).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
-            ws.Range(1, 1, list.Count + 2, 11).Style.Border.InsideBorder = XLBorderStyleValues.Thin;
+            ws.Range(1, 1, list.Count + 2, 20).Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            ws.Range(1, 1, list.Count + 2, 20).Style.Border.InsideBorder = XLBorderStyleValues.Thin;
 
             ws.Columns().AdjustToContents();
 
@@ -512,6 +540,7 @@ public class ReconciliationDetail3
 
     public string Status { get; set; } = "";
     public object SkuAnchanto { get; internal set; }
+    public string ConsignmentNo {get ; set; }
 }
 
 public class Record
@@ -524,4 +553,5 @@ public class Record
     public string? SenderSite { get; set; }     
     public string? ReceiveSite { get; set; }
     public decimal? UnitCOGS { get; set; }
+    public string? ConsignmentNo {get; set;}
 }
