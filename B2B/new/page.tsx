@@ -1,6 +1,7 @@
 "use client";
 
 import { use, useState } from "react";
+import Sidebar from "../../components/layouts/Sidebar";
 
 interface Detail {
   refNo: string;
@@ -35,7 +36,7 @@ export default function Home() {
   const [endDate, setEndDate] = useState("");
 
   // ========================
-  // 🔹 Upload 3 Excel
+  // 🔹 Upload 2 Excel
   // ========================
   const handleUpload = async () => {
     if (!file1 || !file2) {
@@ -90,6 +91,7 @@ export default function Home() {
     default: return "";
   }
 };
+
 
   // ========================
   // 🔹 Filter & Pagination
@@ -166,9 +168,9 @@ export default function Home() {
   // 🔹 JSX
   // ========================
   return (
-    <main className="flex justify-center items-start p-6">
-      {/* <Sidebar/> */}
-      <div className="w-full max-w-6xl">
+    <main className="flex items-start p-6 pl-30 pr-10">
+      <Sidebar/>
+      <div className="w-full max-w-6xl mx-auto">
         <h1 className="text-2xl font-bold text-center mb-8">Monitoring B2B</h1>
 
         {/* Upload */}
@@ -281,7 +283,7 @@ export default function Home() {
 
         {/* Table */}
         {result && (
-          <div className="overflow-x-auto border rounded-lg">
+            <div className="overflow-x-auto border rounded-lg">
             <table className="min-w-max text-sm border">
               <thead>
                 {/* 🔥 ROW 1: GROUP HEADER */}
@@ -321,6 +323,7 @@ export default function Home() {
                     <td className="p-2 border">{d.itemName ?? "-"}</td>
                     <td className="p-2 border">{formatDate(d.dateAnchanto)}</td>
                     <td className="p-2 border">{d.qtyAnchanto?? "-"}</td>
+                    
                     <td className="p-2 border">{d.senderSite ?? "-"}</td>
                     <td className="p-2 border">{d.receiveSite ?? "-"}</td>
                     <td className="p-2 border">{d.skuCegid ?? "-"}</td>
@@ -333,6 +336,7 @@ export default function Home() {
                 ))}
               </tbody>
             </table>
+            </div>)}
 
             {/* Pagination */}
             <div className="flex justify-between items-center mt-4 px-2">
@@ -352,8 +356,6 @@ export default function Home() {
                 Next
               </button>
             </div>
-          </div>
-        )}
       </div>
     </main>
   );
