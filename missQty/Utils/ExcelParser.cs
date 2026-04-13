@@ -54,12 +54,12 @@ namespace Reconciliation.Api.Utils
                 // Looping mulai dari baris kedua (index 1)
                 foreach (DataRow row in table.Rows.Cast<DataRow>().Skip(1))
                 {
-                    var refNo = GetValue(row, map, "Order Number", "Internal ref", "RefNo", "internalReference", "Reference Number");
+                    var refNo = GetValue(row, map, "Reference_Document", "Order Number", "Internal ref", "RefNo", "internalReference", "Reference Number");
                     if (string.IsNullOrWhiteSpace(refNo)) continue;
 
-                    var sku = GetValue(row, map, "SKU", "Seller Sku", "Article", "Product Sku");
+                    var sku = GetValue(row, map, "SKU", "Line_Barcode", "Seller Sku", "Article", "Product Sku");
 
-                    var qtyStr = GetValue(row, map, "Gi_qty", "Ordered Quantity", "Qty", "Stok", "Consignment Quantity");
+                    var qtyStr = GetValue(row, map, "Gi_qty", "Line_Quantity", "Ordered Quantity", "Qty", "Stok", "Consignment Quantity");
                     int? qty = null;
 
                     if (!string.IsNullOrEmpty(qtyStr))
@@ -88,8 +88,8 @@ namespace Reconciliation.Api.Utils
                     DateTime? trxDate = null;
                     if (!string.IsNullOrEmpty(dateStr) && DateTime.TryParse(dateStr.Trim(), out var d)) trxDate = d;
 
-                    var senderSite = GetValue(row, map, "SENDER_SITE");
-                    var receiveSite = GetValue(row, map, "RECEIVE_SITE");
+                    var senderSite = GetValue(row, map, "Sender_Site", "SENDER_SITE");
+                    var receivedSite = GetValue(row, map, "Receive_Site","RECEIVE_SITE");
                     var marketplace = GetValue(row, map, "Marketplace");
                     var itemName = GetValue(row, map, "Item Name", "articledesc", "Product Name");
                     var unitCOGS = GetValue(row, map, "Gi_Unit_COGS");
@@ -102,10 +102,11 @@ namespace Reconciliation.Api.Utils
                         Sku = sku?.Trim() ?? "",
                         Qty = qty,
                         TrxDate = trxDate,
+                        LineDate = trxDate,
                         Marketplace = marketplace?.Trim(),
                         ItemName = itemName?.Trim(),
                         SenderSite = senderSite?.Trim(),
-                        ReceiveSite = receiveSite?.Trim(),
+                        ReceivedSite = receivedSite?.Trim(),
                         UnitCOGS = decimal.TryParse(unitCOGS, NumberStyles.Any, CultureInfo.InvariantCulture, out var cogs) ? cogs : (decimal?)null
                     });
                 }
