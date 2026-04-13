@@ -29,19 +29,27 @@ export default function Dashboard() {
 
   // Actions
   const fetchLogs = async () => {
-    setLoading(true);
+  setLoading(true);
+  try {
+    const res = await fetch('http://localhost:5000/reconciliations/available-files');
+    const rawData = await res.text(); // Ambil teks mentah untuk di-debug
+    
+    console.log("ISI RESPONSE ASLI:", rawData); 
+
+    // Coba parse ke JSON
     try {
-      const res = await fetch('http://localhost:5000/reconciliations/available-files', {
-        cache: 'no-store'
-      });
-      const data = await res.json();
-      setLogs(data);
-    } catch (err) {
-      console.error("Gagal fetch data:", err);
-    } finally {
-      setLoading(false);
+      const parsedData = JSON.parse(rawData);
+      setLogs(parsedData); // Update state logs agar tabel terisi
+    } catch (parseErr) {
+      console.error("Gagal parse JSON. Isi response bukan JSON valid:", rawData);
     }
-  };
+
+  } catch (err) {
+    console.error("Gagal fetch data:", err);
+  } finally {
+    setLoading(false);
+  }
+};
   
   const handleOpenProcess = (log: SyncLog) => {
     setSelectedLogId(log.id);
