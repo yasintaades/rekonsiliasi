@@ -27,21 +27,22 @@ namespace Reconciliation.Api.Services
         var cegidDataRaw = await _repo.GetCegidByLogId(logId);
         // DEBUG: Cek satu contoh data dari DB
     var sample = cegidDataRaw.FirstOrDefault();
-    if (sample != null) {
-        Console.WriteLine($"DEBUG: Contoh Data DB -> RefNo: {sample.RefNo}, Qty: {sample.Qty}");
-    } else {
-        Console.WriteLine("DEBUG: DATA DARI DB KOSONG TOTAL!");
-    }
+    
 
     Console.WriteLine($"---> MENCARI DATA CEGID UNTUK LOG ID: {logId}");
         
         // Log untuk debug di terminal
-        Console.WriteLine($"DEBUG: Data Cegid ditemukan = {cegidDataRaw.Count()} baris");
+        // Console.WriteLine($"DEBUG: Data Cegid ditemukan = {cegidDataRaw.Count()} baris");
 
         var dataCegid = cegidDataRaw.Select(x => new Record2 {
             RefNo = x.RefNo?.Trim().ToUpper() ?? "",
             Sku = x.Sku?.Trim().ToUpper() ?? "",
-            Qty = x.Qty // Langsung ambil apa adanya dari DB
+            Qty = x.Qty, // Langsung ambil apa adanya dari DB
+            SenderSite = x.SenderSite,
+            ReceivedSite = x.ReceivedSite,
+            ItemNameCegid = x.ItemNameCegid,
+            DateCegid = x.DateCegid,
+            UnitCOGS = x.UnitCOGS,
         }).ToList();
 
         // 2. Parse file Anchanto
@@ -52,7 +53,7 @@ namespace Reconciliation.Api.Services
             Qty = x.Qty ?? 0
         }).ToList();
 
-        Console.WriteLine($"DEBUG: Data Anchanto ditemukan = {dataAnchanto.Count} baris");
+        // Console.WriteLine($"DEBUG: Data Anchanto ditemukan = {dataAnchanto.Count} baris");
 
         // 3. Proses Rekonsiliasi
         var details = ProcessReconciliation(dataAnchanto, dataCegid);
@@ -128,6 +129,8 @@ namespace Reconciliation.Api.Services
     var itemsFrom1 = g.Where(x => x.Source == "1").Select(x => x.Data).ToList();
     var itemsFrom2 = g.Where(x => x.Source == "2").Select(x => x.Data).ToList();
 
+    var cegidRef = itemsFrom2.FirstOrDefault();
+
     // Jumlahkan Qty-nya
     int? qty1 = itemsFrom1.Any() ? itemsFrom1.Sum(x => x.Qty ?? 0) :(int?) null;
     int? qty2 = itemsFrom2.Any() ? itemsFrom2.Sum(x => x.Qty ?? 0) : (int?)null;
@@ -155,9 +158,15 @@ namespace Reconciliation.Api.Services
         RefNo = g.Key.RefNo,
         SkuAnchanto = sku1,
         QtyAnchanto = qty1,
-        SkuCegid = sku2,
-        QtyCegid = qty2,
-        Status = status
+
+       SenderSite = cegidRef?.SenderSite,
+    ReceivedSite = cegidRef?.ReceivedSite,
+    SkuCegid = cegidRef?.Sku,
+    ItemNameCegid = cegidRef?.ItemName, 
+    DateCegid = cegidRef?.LineDate,
+    QtyCegid = qty2,
+    UnitCOGS = cegidRef?.UnitCOGS,
+    Status = status
     });
 }
     return details;
