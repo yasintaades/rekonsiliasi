@@ -19,8 +19,13 @@ interface ReconDetail {
   refNo: string;
   skuAnchanto: string | null;
   qtyAnchanto: number | null;
+  senderSite: string | null;
+  receivedSite: string | null;
   skuCegid: string | null;
+  itemNameCegid: string |null;
+  dateCegid : string | null;
   qtyCegid: number | null;
+  unitCOGS: number | null;
   status: "MATCH_ALL" | "ONLY_ANCHANTO" | "ONLY_CEGID" | "QTY_MISMATCH";
 }
 
@@ -96,8 +101,8 @@ function B2BContent() {
       alert("Berhasil! Data telah dibandingkan.");
 
     } catch (err: any) {
-      console.error("Recon Error:", err);
-      alert("Gagal memproses: " + err.message);
+      // console.error("Recon Error:", err);
+      // alert("Gagal memproses: " + err.message);
     } finally {
       setLoading(false);
     }
@@ -237,45 +242,60 @@ function B2BContent() {
                 </div>
 
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
+                  <table className="w-full text-left border-collapse min-w-[1600px]">
                     <thead>
-                      <tr className="bg-slate-50 text-slate-500 font-bold text-[10px] uppercase tracking-widest border-b">
-                        <th className="px-6 py-4">Ref Number</th>
-                        <th className="px-6 py-4 bg-blue-50/30">SKU (Anch)</th>
-                        <th className="px-6 py-4 bg-blue-50/30">Qty (Anch)</th>
-                        <th className="px-6 py-4 bg-orange-50/30">SKU (Cegid)</th>
-                        <th className="px-6 py-4 bg-orange-50/30">Qty (Cegid)</th>
-                        <th className="px-6 py-4 text-center">Status</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {currentItems.map((item, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 transition-colors group">
-                          <td className="px-6 py-4 font-bold text-slate-700">{item.refNo}</td>
-                          <td className="px-6 py-4 text-slate-600">{item.skuAnchanto || "---"}</td>
-                          <td className="px-6 py-4 font-mono font-bold">{item.qtyAnchanto ?? 0}</td>
-                          <td className="px-6 py-4 text-slate-600">{item.skuCegid || "---"}</td>
-                          <td className="px-6 py-4 font-mono font-bold">{item.qtyCegid ?? 0}</td>
-                          <td className="px-6 py-4 text-center">
-                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase
-                              ${item.status === 'MATCH_ALL' ? 'bg-emerald-100 text-emerald-700' : 
-                                item.status === 'ONLY_ANCHANTO' ? 'bg-blue-100 text-blue-700' :
-                                item.status === 'ONLY_CEGID' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
-                              {item.status === 'MATCH_ALL' ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
-                              {item.status.replace('_', ' ')}
-                            </span>
-                          </td>
+                        <tr className="bg-slate-50 text-slate-500 font-bold text-[10px] uppercase tracking-widest border-b">
+                          {/* Tambahkan sticky di kolom pertama agar Ref Number tetap terlihat saat digeser */}
+                          <th className="px-6 py-4 sticky left-0 bg-slate-50 z-20 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Ref Number</th>
+                          <th className="px-6 py-4 bg-blue-50/30 whitespace-nowrap">SKU (Anch)</th>
+                          <th className="px-6 py-4 bg-blue-50/30 whitespace-nowrap">Qty (Anch)</th>
+                          <th className="px-6 py-4 bg-slate-100/50 whitespace-nowrap">Sender Site</th>
+                          <th className="px-6 py-4 bg-slate-100/50 whitespace-nowrap">Received Site</th>
+                          <th className="px-6 py-4 bg-orange-50/30 whitespace-nowrap">SKU (Cegid)</th>
+                          <th className="px-6 py-4 bg-orange-50/30 whitespace-nowrap">Item Name</th>
+                          <th className="px-6 py-4 bg-orange-50/30 whitespace-nowrap">Date</th>
+                          <th className="px-6 py-4 bg-orange-50/30 whitespace-nowrap">Qty (Cegid)</th>
+                          <th className="px-6 py-4 bg-orange-50/30 whitespace-nowrap">Unit COGS</th>
+                          <th className="px-6 py-4 text-center sticky right-0 bg-slate-50 z-20 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">Status</th>
                         </tr>
-                      ))}
-                      {filteredDetails.length === 0 && (
-                        <tr>
-                          <td colSpan={6} className="px-6 py-20 text-center">
-                            <FileX size={48} className="mx-auto text-slate-200 mb-4" />
-                            <p className="text-slate-400 font-medium">Tidak ada data yang cocok dengan filter.</p>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {currentItems.map((item, idx) => (
+                          <tr key={idx} className="hover:bg-slate-50 transition-colors group">
+                            {/* Kolom Ref Number dibuat Sticky */}
+                            <td className="px-6 py-4 font-bold text-slate-700 sticky left-0 bg-white group-hover:bg-slate-50 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)] whitespace-nowrap">
+                              {item.refNo}
+                            </td>
+                            
+                            <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{item.skuAnchanto || "---"}</td>
+                            <td className="px-6 py-4 font-mono font-bold whitespace-nowrap text-blue-700">{item.qtyAnchanto ?? 0}</td>
+                            
+                            <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{item.senderSite || "---"}</td>
+                            <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{item.receivedSite || "---"}</td>
+                            
+                            <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{item.skuCegid || "---"}</td>
+                            <td className="px-6 py-4 text-slate-600 whitespace-nowrap max-w-[200px] truncate" title={item.itemNameCegid ?? ""}>
+                              {item.itemNameCegid || "---"}
+                            </td>
+                            <td className="px-6 py-4 text-slate-600 whitespace-nowrap">{item.dateCegid || "---"}</td>
+                            <td className="px-6 py-4 font-mono font-bold whitespace-nowrap text-orange-700">{item.qtyCegid ?? 0}</td>
+                            <td className="px-6 py-4 text-slate-600 whitespace-nowrap">
+                              {item.unitCOGS?.toLocaleString('id-ID', { style: 'currency', currency: 'IDR' }) || "---"}
+                            </td>
+
+                            {/* Kolom Status dibuat Sticky di kanan */}
+                            <td className="px-6 py-4 text-center sticky right-0 bg-white group-hover:bg-slate-50 z-10 shadow-[-2px_0_5px_-2px_rgba(0,0,0,0.1)]">
+                              <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase whitespace-nowrap
+                                ${item.status === 'MATCH_ALL' ? 'bg-emerald-100 text-emerald-700' : 
+                                  item.status === 'ONLY_ANCHANTO' ? 'bg-blue-100 text-blue-700' :
+                                  item.status === 'ONLY_CEGID' ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'}`}>
+                                {item.status === 'MATCH_ALL' ? <CheckCircle2 size={12} /> : <AlertTriangle size={12} />}
+                                {item.status.replace('_', ' ')}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
                   </table>
                    {/* Pagination UI */}
                   {filteredDetails.length > 0 && (
