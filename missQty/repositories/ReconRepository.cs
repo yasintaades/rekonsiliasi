@@ -20,7 +20,7 @@ namespace Reconciliation.Api.Repositories
             using var db = new NpgsqlConnection(_conn);
             // Mengambil log sinkronisasi SFTP terbaru
             return await db.QueryAsync<FtpSyncLog>(@"
-                SELECT id, file_name as FileName, status, message, processed_at as ProcessedAt 
+                SELECT id, file_name as FileName, status, message, processed_at as ProcessedAt
                 FROM sftp_sync_logs 
                 ORDER BY processed_at DESC");
         }
@@ -29,9 +29,14 @@ namespace Reconciliation.Api.Repositories
 {
     using var db = new NpgsqlConnection(_conn); // Tambahkan ini
     var sql = @"SELECT 
+                    sender_site AS SenderSite,
+                    received_site AS ReceivedSite,
                     ref_no AS RefNo, 
                     sku AS Sku, 
-                    qty AS Qty
+                    item_name_cegid AS ItemNameCegid,
+                    date_cegid AS DateCegid,
+                    qty AS Qty,
+                    unit_cogs AS UnitCOGS
                 FROM sftp_data_details 
                 WHERE log_id = @logId";
     
@@ -74,8 +79,10 @@ public async Task<int> SaveSyncLog(FtpSyncLog log)
 
                 // 2. Simpan Detail Rekonsiliasi
                 var sqlDetail = @"
-                    INSERT INTO recon_details (recon_id, ref_no, sku_anchanto, qty_anchanto, sku_cegid, qty_cegid, status)
-                    VALUES (@ReconId, @RefNo, @SkuAnchanto, @QtyAnchanto, @SkuCegid, @QtyCegid, @Status)";
+                    INSERT INTO recon_details (recon_id, ref_no, sku_anchanto, qty_anchanto, sender_site, received_site, sku_cegid,
+                    item_name_cegid,date_cegid, qty_cegid, unit_COGS, status)
+                    VALUES (@ReconId, @RefNo, @SkuAnchanto, @QtyAnchanto, @SenderSite, @ReceivedSite, @SkuCegid, @ItemNameCegid,
+                    @DateCegid, @QtyCegid, @UnitCOGS, @Status)";
 
                 foreach (var item in details)
                 {
@@ -84,8 +91,13 @@ public async Task<int> SaveSyncLog(FtpSyncLog log)
                         item.RefNo, 
                         item.SkuAnchanto, 
                         item.QtyAnchanto, 
+                        item.SenderSite,
+                        item.ReceivedSite,
                         item.SkuCegid, 
+                        item.ItemNameCegid,
+                        item.DateCegid,
                         item.QtyCegid, 
+                        item.UnitCOGS,
                         item.Status 
                     }, transaction: trans);
                 }
@@ -95,7 +107,7 @@ public async Task<int> SaveSyncLog(FtpSyncLog log)
             }
             catch
             {
-                await trans.RollbackAsync();
+                // await trans.RollbackAsync();
                 throw;
             }
         }
@@ -105,7 +117,9 @@ public async Task<int> SaveSyncLog(FtpSyncLog log)
             using var db = new NpgsqlConnection(_conn);
             var sql = @"
                 SELECT ref_no as RefNo, sku_anchanto as SkuAnchanto, qty_anchanto as QtyAnchanto, 
-                       sku_cegid as SkuCegid, qty_cegid as QtyCegid, status as Status
+                       sender_site AS SenderSite, received_site AS ReceivedSite, sku_cegid as SkuCegid, 
+                       item_name_cegid AS ItemNameCegid, date_cegid AS DateCegid, qty_cegid as QtyCegid,
+                       unit_COGS AS UnitCOGS, status as Status
                 FROM recon_details 
                 WHERE recon_id = @id";
 
@@ -125,15 +139,26 @@ public async Task SaveSftpDetail(int logId, Record2 item)
     using var db = new NpgsqlConnection(_conn);
     // Pastikan nama tabel ini (sftp_data_details) sama dengan yang kamu buat di SQL
     const string sql = @"
-        INSERT INTO sftp_data_details (log_id, ref_no, sku, qty) 
-        VALUES (@logId, @RefNo, @Sku, @Qty)";
+                INSERT INTO sftp_data_details (
+                    log_id, ref_no, sku, qty, sender_site, 
+                    received_site, item_name, line_date, unit_COGS
+                ) 
+                VALUES (
+                    @logId, @RefNo, @Sku, @Qty, @SenderSite, 
+                    @ReceivedSite, @ItemName, @LineDate, @UnitCogs
+                )";
     
     await db.ExecuteAsync(sql, new { 
-        logId, 
-        item.RefNo, 
-        item.Sku, 
-        Qty = item.Qty 
-    });
+                logId, 
+                item.RefNo, 
+                item.Sku, 
+                item.Qty,
+                item.SenderSite,
+                item.ReceivedSite,
+                item.ItemName,
+                item.LineDate,
+                item.UnitCOGS
+            });
 }
 
 public async Task UpdateSyncLogStatus(int id, string status, string message)
