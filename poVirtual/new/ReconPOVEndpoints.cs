@@ -173,7 +173,7 @@ public static class ReconPOVEndpoints
             // ========= SUMMARY =========
             var summary = new
             {
-               all = details.Count,
+                all = details.Count,
                 matchAll = details.Count(x => x.Status == "MATCH_ALL"),
                 mismatch = details.Count(x => x.Status == "PARTIAL_MATCH"|| x.Status == "ONLY_ONE_SOURCE"),
                 partial = details.Count(x => x.Status == "PARTIAL_MATCH"),
