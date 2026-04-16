@@ -1,61 +1,40 @@
 using Microsoft.AspNetCore.Http.Features;
-using Reconciliation.Api.Services;
-using Reconciliation.Api.Repositories;
+using Reconciliation.Api.Endpoints;
 
-var builder = WebApplication.CreateBuilder(args);
+    var builder = WebApplication.CreateBuilder(args);
 
-// =====================
-// CORS
-// =====================
-builder.Services.AddCors(options =>
-{
-    options.AddDefaultPolicy(policy =>
+    // CORS
+    builder.Services.AddCors(options =>
     {
-        policy.AllowAnyOrigin()
-              .AllowAnyHeader()
-              .AllowAnyMethod();
+        options.AddDefaultPolicy(policy =>
+        {
+            policy.AllowAnyOrigin()
+                .AllowAnyHeader()
+                .AllowAnyMethod();
+        });
     });
-});
 
-// =====================
-// LIMIT UPLOAD
-// =====================
-builder.WebHost.ConfigureKestrel(options =>
-{
-    options.Limits.MaxRequestBodySize = 104857600; // 100 MB
-});
+    builder.WebHost.ConfigureKestrel(options =>
+    {
+        options.Limits.MaxRequestBodySize = 104857600; // 100 MB
+    });
+        builder.Services.Configure<FormOptions>(options =>
+    {
+        options.MultipartBodyLengthLimit = 104857600;
+    });
 
-builder.Services.Configure<FormOptions>(options =>
-{
-    options.MultipartBodyLengthLimit = 104857600;
-});
 
-// =====================
-// DEPENDENCY INJECTION
-// =====================
-builder.Services.AddScoped<ReconService>();
-builder.Services.AddScoped<ReconRepository>();
-builder.Services.AddScoped<ReconPOVService>();
-builder.Services.AddScoped<ReconPOVRepository>();
+    var app = builder.Build();
 
-builder.Services.AddControllers();
-app.MapControllers();
+    app.UseCors();
 
-builder.Services.AddControllers();
+    // 🔥 panggil endpoint dari file lain
+    // app.MapReconB2BEndpoint();
+    app.MapGet("/", () => "API is running...");
+    app.MapGet("/reconciliations/upload/details", () => "Details endpoint is running...");
+    app.MapReconPOVEndpoints();
 
-// =====================
-// BUILD APP
-// =====================
-var app = builder.Build();
+// =====pemisah=====
 
-// =====================
-// MIDDLEWARE
-// =====================
-app.UseCors();
 
-app.MapControllers();
-
-app.MapGet("/", () => "API is running...");
-
-// =====================
-app.Run();
+    app.Run();
